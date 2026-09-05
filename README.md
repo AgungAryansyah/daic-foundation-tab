@@ -6,14 +6,17 @@ DAIC-WOZ is licensed sensitive data and is not distributed by this repository. K
 
 ## Setup
 
-The project uses Python 3.13 and [uv](https://docs.astral.sh/uv/). From the project directory:
+The project uses Python 3.13 and [uv](https://docs.astral.sh/uv/). Fine-tuning is supported only on the remote Linux x86_64 GPU server with an NVIDIA driver reporting CUDA 12.2. The lock installs PyTorch 2.5.1 with CUDA 12.1 runtime libraries; CPU-only PyTorch and CPU experiment execution are intentionally unsupported.
+
+On the remote server, verify that the driver exposes the GPU, then synchronize the locked CUDA environment:
 
 ```bash
+nvidia-smi
 uv sync --group dev
-uv run pytest
+uv run python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
 ```
 
-The locked default uses PyTorch's CPU wheel so the project can run on modest local storage. The model chooses CUDA automatically when a CUDA-enabled PyTorch build is installed; otherwise it records CPU fallback in each run's environment metadata.
+Every `run` command requires `cuda:0` and exits before it reads data, creates output, or initializes W&B if CUDA is unavailable. The resolved run metadata records the selected device, CUDA runtime, GPU name, VRAM, and peak CUDA memory.
 
 ## W&B research tracking
 
@@ -71,7 +74,7 @@ uv run python -m daic_foundation_tab.cli validate \
 
 ## Fine-tuning experiments
 
-Start with the non-final one-epoch smoke run. It disables bootstrap and repeated holdouts:
+Run these commands only on the validated remote GPU server. Start with the non-final one-epoch smoke run, which disables bootstrap and repeated holdouts:
 
 ```bash
 uv run python -m daic_foundation_tab.cli run \
