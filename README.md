@@ -1,14 +1,12 @@
-# DAIC-WOZ Tabular Foundation Models
+# DAIC-WOZ TabICLv2 Fine-Tuning
 
-This project evaluates fine-tuned TabICLv2 on participant-level DAIC-WOZ behavioral features for binary depression prediction. It does not provide a standalone zero-shot/in-context TabICL workflow, conventional baselines, other foundation models, raw audio/video, or text embeddings.
+This repository is a reproducible research pipeline for fine-tuning TabICLv2 on participant-level DAIC-WOZ behavioural features for binary depression prediction. It builds numeric audio, visual, and audio-visual feature sets, runs leakage-safe development experiments, and records privacy-safe research metadata in Weights & Biases (W&B).
 
-DAIC-WOZ is licensed sensitive data and is not distributed by this repository. Keep it in the local, ignored `data/` directory or set `data.root` in a copied configuration. Never commit data, cached features, checkpoints, or experiment outputs.
+DAIC-WOZ is licensed sensitive data and is not included in this repository. Keep the dataset, feature cache, checkpoints, and experiment outputs outside version control.
 
-## Setup
+## Remote environment
 
-The project uses Python 3.12 and [uv](https://docs.astral.sh/uv/). Fine-tuning is supported only on the remote Linux x86_64 GPU server with an NVIDIA driver reporting CUDA 12.2. The lock installs the CPython 3.12 Linux PyTorch 2.5.1 CUDA 12.1 wheel; CPU-only PyTorch and CPU experiment execution are intentionally unsupported.
-
-On the remote server, verify that the driver exposes the GPU, then synchronize the locked CUDA environment:
+Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.5.1 with CUDA 12.1, and an NVIDIA driver compatible with CUDA 12.2 or later. CPU fine-tuning is intentionally unsupported.
 
 ```bash
 nvidia-smi
@@ -17,33 +15,27 @@ uv sync --group dev --python 3.12
 uv run --python 3.12 python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
 ```
 
-`python --version` must report Python 3.12 (the server's 3.12.9 is supported). The project rejects other Python minor versions, so `uv` cannot install an ABI-incompatible PyTorch wheel.
+Every experiment requires `cuda:0`. The runner verifies CUDA before reading data, creating outputs, or initializing W&B, then records the selected device, CUDA runtime, GPU model, VRAM, and peak memory use.
 
-Every `run` command requires `cuda:0` and exits before it reads data, creates output, or initializes W&B if CUDA is unavailable. The resolved run metadata records the selected device, CUDA runtime, GPU name, VRAM, and peak CUDA memory.
+## W&B setup
 
-## W&B research tracking
-
-W&B tracking is enabled by default for remote runs. Create a local `.env` from the tracked example and set the key for the private W&B account approved for this research:
+W&B tracking is enabled by default. Create a local credential file on the remote server:
 
 ```bash
 cp .env.example .env
 ```
 
-Set `WANDB_API_KEY` in `.env`. The tracker loads that file without overriding an already exported environment variable, and neither form of the key is written to a run configuration, output, or artifact.
+Set `WANDB_API_KEY` in `.env`. The key is loaded before W&B initialization and an already-exported `WANDB_API_KEY` takes precedence. Credentials are never written to configs, local run metadata, or W&B artifacts.
 
-Each run is grouped by a stable study fingerprint and tagged by model, modality, task, and smoke/full profile. Its W&B dashboard prioritizes fine-tuning selection, development metrics, uncertainty summaries, repeated-holdout summaries, and runtime. Those phase-completion values are also explicit run-summary fields for comparing runs. The immutable `research-record` artifact retains the sanitized configuration, dataset fingerprint, cohort-level train/validation/development/test information, repeated-holdout metric rows, runtime, and environment.
+The supported tracking modes are configured in `tracking.wandb.mode`:
 
-Participant IDs, raw labels or targets, feature values/manifests, split assignments, predictions, raw inputs, local paths, and checkpoints stay in the ignored local run directory and are never uploaded. Test predictions remain disabled; W&B records only test-cohort availability and shape.
+- `online` streams the run to the configured W&B project.
+- `offline` stores W&B records within the ignored experiment output for later synchronization.
+- `disabled` skips W&B SDK initialization.
 
-The base configuration supports these modes:
+## Dataset layout
 
-- `online` is the default and requires W&B credentials/connectivity.
-- `offline` writes W&B records beneath the ignored experiment output for later synchronization.
-- `disabled` skips W&B SDK initialization for tests or tracking-free runs.
-
-## Expected local layout
-
-The supplied flat DAIC-WOZ copy is configured as follows:
+The supplied flat DAIC-WOZ copy is expected to have this structure:
 
 ```text
 data/
@@ -58,57 +50,63 @@ data/
     └── 300_CLNF_pose.txt
 ```
 
-Source patterns, labels, aggregation, and outputs are configuration values. Dataset inspection is discovery-only:
+Inspect, build, and validate the selected cohort before starting an experiment:
 
 ```bash
-uv run python -m daic_foundation_tab.cli inspect \
+uv run --python 3.12 python -m daic_foundation_tab.cli inspect \
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli build-features \
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli validate \
   --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
 ```
 
-The strict default requires every requested modality. The current local copy lacks all requested sources for one development participant, so the complete-cohort presets explicitly exclude and audit that participant:
+## Run experiments
+
+Start with the one-epoch smoke configuration. It disables bootstrap and repeated holdouts:
 
 ```bash
-uv run python -m daic_foundation_tab.cli build-features \
-  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
-
-uv run python -m daic_foundation_tab.cli validate \
-  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
-```
-
-## Fine-tuning experiments
-
-Run these commands only on the validated remote GPU server. Start with the non-final one-epoch smoke run, which disables bootstrap and repeated holdouts:
-
-```bash
-uv run python -m daic_foundation_tab.cli run \
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
   --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort_smoke.yaml
 ```
 
-The default fine-tuning profile uses up to 50 epochs, early stopping selected by train-only validation ROC-AUC, and only retains `checkpoints/best.ckpt`. The official development split is never used for training, early stopping, feature selection, or checkpoint selection.
-
-After confirming checkpoint loading, run the full modality ablations:
+Then run the three full modality ablations:
 
 ```bash
-uv run python -m daic_foundation_tab.cli run \
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
   --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
 
-uv run python -m daic_foundation_tab.cli run \
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
   --config configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml
 
-uv run python -m daic_foundation_tab.cli run \
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
   --config configs/experiments/tabiclv2_ft_visual_complete_cohort.yaml
 ```
 
-Compare saved development results with:
+Compare development metrics from completed runs:
 
 ```bash
-uv run python -m daic_foundation_tab.cli compare outputs/<run-a> outputs/<run-b> outputs/<run-c>
+uv run --python 3.12 python -m daic_foundation_tab.cli compare \
+  outputs/<run-a> outputs/<run-b> outputs/<run-c>
 ```
 
-Every participant becomes exactly one row after temporal mean/std pooling. Frame, timestamp, confidence, success, participant ID, PHQ-8 scores/items, labels, and targets never enter the feature matrix. The binary target is derived from `PHQ8_Score >= 10`; supplied binary labels are audited but not used.
+## Evaluation protocol
 
-Each run creates a reproducible stratified 80/20 split from official train. Feature filtering is fit on the 80% fine-tuning partition only, and its columns are then applied to early-stopping validation, dev, and test data. Repeated internal holdouts use a nested train-only early-stopping split for every outer evaluation split.
+Each participant is represented by one row after temporal mean/std pooling. Frame metadata, participant identifiers, PHQ-8 scores/items, supplied labels, and prediction targets are excluded from the feature matrix. The binary target is derived from `PHQ8_Score >= 10`; supplied binary labels are retained only for auditing.
 
-Each final result directory contains the resolved config, environment, feature manifest, reconciliation report, validation report, `finetune_split.csv`, `finetune_metadata.json`, the retained best checkpoint, development predictions/metrics, uncertainty artifacts, runtime/VRAM metadata, and a cautious summary. Test prediction generation is intentionally disabled until a separate frozen full-data finalization workflow is implemented.
+For each run, the official training split is stratified into an 80% fine-tuning partition and 20% early-stopping validation partition. Feature filtering is fit only on the fine-tuning partition. The official development split is reserved for evaluation and never participates in feature selection, fine-tuning, or checkpoint selection. Repeated internal holdouts use nested train-only early-stopping partitions.
 
-DAIC-WOZ is an extreme-small-N dataset. Fine-tuning is a leakage-safe feasibility study and must not be presented as a clinical-use, superiority, or state-of-the-art claim.
+The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. Test prediction generation is intentionally disabled pending a separate frozen full-data finalization workflow.
+
+## Research records
+
+Each local result directory contains resolved settings, environment metadata, data-validation reports, feature and split provenance, the best checkpoint, development predictions and metrics, uncertainty results, runtime metadata, and a summary.
+
+W&B receives a sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, model-selection metadata, aggregate metrics, bootstrap summaries, repeated-holdout metric rows, runtime metadata, and an immutable `research-record` artifact. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
+
+## Research use
+
+DAIC-WOZ is an extreme-small-N dataset. These experiments are a leakage-safe feasibility study and must not be presented as clinical-use, superiority, or state-of-the-art claims.
+
