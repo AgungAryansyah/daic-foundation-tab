@@ -28,6 +28,7 @@ class _FakeRun:
         self.id = "run-123"
         self.url = "https://wandb.example/run-123"
         self.logs = []
+        self.summary = {}
         self.artifacts = []
         self.finished = []
 
@@ -157,7 +158,7 @@ def test_sanitized_config_excludes_local_paths() -> None:
     assert "pattern" not in config["data"]["source_groups"]["covarep"]
 
 
-def test_tracker_logs_only_cohort_level_research_records(monkeypatch, tmp_path) -> None:
+def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeypatch, tmp_path) -> None:
     fake_wandb = _FakeWandb()
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
     artifacts = RunArtifacts(tmp_path, "tabiclv2_ft", "audio", 42)
@@ -198,6 +199,13 @@ def test_tracker_logs_only_cohort_level_research_records(monkeypatch, tmp_path) 
         fake_wandb.init_arguments["tags"]
     )
     assert fake_wandb.run.finished == [0]
+    logged_keys = {key for values in fake_wandb.run.logs for key in values}
+    assert not any(key.startswith("data/") for key in logged_keys)
+    assert "fine_tuning/best_validation_metric" in logged_keys
+    assert "development/macro_f1" in logged_keys
+    assert "fine_tuning/training/participants" not in logged_keys
+    assert fake_wandb.run.summary["fine_tuning/best_validation_metric"] == 0.75
+    assert fake_wandb.run.summary["development/macro_f1"] == 0.6
     assert len(fake_wandb.run.artifacts) == 1
     uploaded_names = {name for _, name in fake_wandb.run.artifacts[0].files}
     assert uploaded_names == {"data_card.json", "results.json", "settings.json"}
@@ -209,6 +217,10 @@ def test_tracker_logs_only_cohort_level_research_records(monkeypatch, tmp_path) 
     assert "participant_id" not in artifact_contents
     assert "checkpoint_path" not in artifact_contents
     assert "predictions_dev.csv" not in artifact_contents
+    data_card = json.loads(
+        (artifacts.path / "wandb_research" / "data_card.json").read_text(encoding="utf-8")
+    )
+    assert data_card["splits"]["train"]["participants"] == 10
     record = json.loads((artifacts.path / "wandb_run.json").read_text(encoding="utf-8"))
     assert record["status"] == "finished"
     assert record["artifact_references"] == [

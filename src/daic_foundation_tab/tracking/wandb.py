@@ -245,7 +245,6 @@ class WandbTracker:
                 ),
             )
         tracker._write_run_record("running" if tracker.run is not None else "disabled")
-        tracker._log("data", tracker.data_card)
         return tracker
 
     def _write_run_record(self, status: str) -> None:
@@ -266,7 +265,9 @@ class WandbTracker:
 
     def _log(self, prefix: str, values: Mapping[str, Any]) -> None:
         if self.run is not None:
-            self.run.log(_scalar_values(prefix, values))
+            scalars = _scalar_values(prefix, values)
+            self.run.log(scalars)
+            self.run.summary.update(scalars)
 
     def record_fine_tuning(
         self,
@@ -287,7 +288,14 @@ class WandbTracker:
         }
         self.data_card["fine_tuning"] = _json_value(fine_tuning)
         self.results["fine_tuning"] = _json_value(fine_tuning)
-        self._log("fine_tuning", fine_tuning)
+        self._log(
+            "fine_tuning",
+            {
+                "feature_count_after_selection": feature_count,
+                "fit_seconds": fit_seconds,
+                "best_validation_metric": metadata.get("best_validation_metric"),
+            },
+        )
 
     def record_development(self, metrics: Mapping[str, Any]) -> None:
         scalar_metrics = _scalar_values("", metrics)
