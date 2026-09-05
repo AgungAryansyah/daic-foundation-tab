@@ -15,6 +15,26 @@ uv run pytest
 
 The locked default uses PyTorch's CPU wheel so the project can run on modest local storage. The model chooses CUDA automatically when a CUDA-enabled PyTorch build is installed; otherwise it records CPU fallback in each run's environment metadata.
 
+## W&B research tracking
+
+W&B tracking is enabled by default for remote runs. Create a local `.env` from the tracked example and set the key for the private W&B account approved for this research:
+
+```bash
+cp .env.example .env
+```
+
+Set `WANDB_API_KEY` in `.env`. The tracker loads that file without overriding an already exported environment variable, and neither form of the key is written to a run configuration, output, or artifact.
+
+Each run is grouped by a stable study fingerprint and tagged by model, modality, task, and smoke/full profile. W&B receives a sanitized configuration, dataset fingerprint, cohort-level train/validation/development/test information, fine-tuning selection metadata, aggregate metrics, uncertainty summaries, repeated-holdout metric rows, runtime, environment, and one immutable `research-record` artifact.
+
+Participant IDs, raw labels or targets, feature values/manifests, split assignments, predictions, raw inputs, local paths, and checkpoints stay in the ignored local run directory and are never uploaded. Test predictions remain disabled; W&B records only test-cohort availability and shape.
+
+The base configuration supports these modes:
+
+- `online` is the default and requires W&B credentials/connectivity.
+- `offline` writes W&B records beneath the ignored experiment output for later synchronization.
+- `disabled` skips W&B SDK initialization for tests or tracking-free runs.
+
 ## Expected local layout
 
 The supplied flat DAIC-WOZ copy is configured as follows:

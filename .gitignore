@@ -9,6 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
+# Local credentials
+.env
+.env.*
+!.env.example
+
 # Licensed local DAIC-WOZ inputs and generated experiment artifacts
 /data/
 cache/
