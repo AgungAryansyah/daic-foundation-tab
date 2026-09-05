@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # Licensed local DAIC-WOZ inputs and generated experiment artifacts
-data/
+/data/
 cache/
 outputs/
 *.parquet
