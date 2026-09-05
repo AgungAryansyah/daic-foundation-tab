@@ -54,7 +54,11 @@ def _build_features(config: dict) -> None:
 
 def _validate(config: dict) -> Path:
     dataset = build_or_load_dataset(config)
-    report = validate_dataset(dataset, config["experiment"]["feature_set"])
+    report = validate_dataset(
+        dataset,
+        config["experiment"]["feature_set"],
+        float(config["data"].get("max_exclusion_fraction", 0.05)),
+    )
     output = _output_path(config, "validation")
     (output / "validation_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     pd.DataFrame(
@@ -98,3 +102,7 @@ def main() -> None:
         _validate(config)
     elif args.command == "run":
         print(run_experiment(config))
+
+
+if __name__ == "__main__":
+    main()

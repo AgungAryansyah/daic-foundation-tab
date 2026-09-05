@@ -22,7 +22,7 @@ def deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str
     return result
 
 
-def load_config(path: str | Path) -> dict[str, Any]:
+def load_config(path: str | Path, *, _validate: bool = True) -> dict[str, Any]:
     config_path = Path(path).resolve()
     if not config_path.is_file():
         raise ConfigError(f"Configuration file does not exist: {config_path}")
@@ -42,13 +42,14 @@ def load_config(path: str | Path) -> dict[str, Any]:
     for parent in parents:
         if not isinstance(parent, str):
             raise ConfigError("Every 'extends' entry must be a path string")
-        resolved = deep_merge(resolved, load_config(config_path.parent / parent))
+        resolved = deep_merge(resolved, load_config(config_path.parent / parent, _validate=False))
 
     current = dict(raw)
     current.pop("extends", None)
     resolved = deep_merge(resolved, current)
     resolved["_config_path"] = str(config_path)
-    validate_config(resolved)
+    if _validate:
+        validate_config(resolved)
     return resolved
 
 
