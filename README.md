@@ -104,9 +104,8 @@ The default profile allows up to 50 epochs, selects on validation ROC-AUC, and r
 
 Each local result directory contains resolved settings, environment metadata, data-validation reports, feature and split provenance, the best checkpoint, development predictions and metrics, uncertainty results, runtime metadata, and a summary.
 
-W&B receives a sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, model-selection metadata, aggregate metrics, bootstrap summaries, repeated-holdout metric rows, runtime metadata, and an immutable `research-record` artifact. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
+W&B charts TabICLv2's real per-epoch mean training loss and validation metrics, then records model-selection metadata, development metrics, bootstrap summaries, repeated-holdout metric rows, and runtime metadata. The immutable `research-record` artifact retains the sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, and fine-tuning history. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
 
 ## Research use
 
 DAIC-WOZ is an extreme-small-N dataset. These experiments are a leakage-safe feasibility study and must not be presented as clinical-use, superiority, or state-of-the-art claims.
-
