@@ -32,6 +32,7 @@ from daic_foundation_tab.tracking.runtime import (
     timed_call,
 )
 from daic_foundation_tab.tracking.seeds import set_global_seed
+from daic_foundation_tab.tracking.wandb import WandbTracker
 
 
 def _positive_probability(model: FineTunableClassifier, features: pd.DataFrame) -> np.ndarray:
@@ -132,20 +133,18 @@ def run_experiment(config: dict[str, Any]) -> Path:
     logger.info("participants train=%s dev=%s test=%s", *(validation["split_statistics"][split]["participants"] for split in ("train", "dev", "test")))
     logger.info("feature_count=%s", len(prepared.selection.columns))
     write_config(config, artifacts.path / "config_resolved.yaml")
-    artifacts.json(
-        "environment.json",
-        {
-            **environment_metadata(),
-            "git_commit": _git_commit(),
-            "random_seeds": {
-                "project": seed,
-                "tabicl": config["model"]["parameters"].get("random_state"),
-                "bootstrap": config["bootstrap"].get("random_state"),
-                "fine_tuning_validation": fine_tuning_config["validation_seed"],
-                "repeated_holdout_start": config["evaluation"]["repeated_holdout"].get("seed_start"),
-            },
+    environment = {
+        **environment_metadata(),
+        "git_commit": _git_commit(),
+        "random_seeds": {
+            "project": seed,
+            "tabicl": config["model"]["parameters"].get("random_state"),
+            "bootstrap": config["bootstrap"].get("random_state"),
+            "fine_tuning_validation": fine_tuning_config["validation_seed"],
+            "repeated_holdout_start": config["evaluation"]["repeated_holdout"].get("seed_start"),
         },
-    )
+    }
+    artifacts.json("environment.json", environment)
     artifacts.json("dataset_summary.json", validation["split_statistics"])
     artifacts.json("dataset_inventory.json", dataset.inventory)
     artifacts.json("validation_report.json", validation)
@@ -162,82 +161,100 @@ def run_experiment(config: dict[str, Any]) -> Path:
         ),
     )
 
-    device = reset_cuda_peak_memory()
-    model = _model_for_seed(config["model"], seed)
-    logger.info("model=%s checkpoint=%s device=%s", config["model"]["name"], config["model"]["checkpoint_version"], device)
-    _, fit_seconds = timed_call(
-        model.fit,
-        prepared.training_x,
-        prepared.training_y,
-        validation_features=prepared.validation_x,
-        validation_target=prepared.validation_y,
-        checkpoint_directory=artifacts.path / "checkpoints",
-    )
-    prediction, predict_seconds = timed_call(model.predict, prepared.dev_x)
-    probability, probability_seconds = timed_call(_positive_probability, model, prepared.dev_x)
-    metrics = classification_metrics(prepared.dev_y, prediction, probability)
-    logger.info("development macro_f1=%s balanced_accuracy=%s", metrics["macro_f1"], metrics["balanced_accuracy"])
-    dev_ids = dataset.table.loc[dataset.table["split"] == "dev", "participant_id"]
-    predictions = classification_predictions(dev_ids, "dev", prediction, probability, prepared.dev_y)
-    artifacts.csv("predictions_dev.csv", predictions)
-    artifacts.json("finetune_metadata.json", model.finetune_metadata())
-    artifacts.json("metrics_dev.json", metrics)
-    artifacts.csv(
-        "metrics_dev.csv",
-        pd.DataFrame([{key: value for key, value in metrics.items() if isinstance(value, float)}]),
-    )
-
-    bootstrap_summary = None
-    if config["bootstrap"].get("enabled", False):
-        bootstrap_distribution, bootstrap_summary = bootstrap_metrics(
-            prepared.dev_y,
-            prediction,
-            probability,
-            int(config["bootstrap"]["iterations"]),
-            float(config["bootstrap"]["confidence"]),
-            int(config["bootstrap"]["random_state"]),
+    tracker = WandbTracker.start(config, artifacts, validation, dataset.cache_key)
+    try:
+        device = reset_cuda_peak_memory()
+        model = _model_for_seed(config["model"], seed)
+        logger.info("model=%s checkpoint=%s device=%s", config["model"]["name"], config["model"]["checkpoint_version"], device)
+        _, fit_seconds = timed_call(
+            model.fit,
+            prepared.training_x,
+            prepared.training_y,
+            validation_features=prepared.validation_x,
+            validation_target=prepared.validation_y,
+            checkpoint_directory=artifacts.path / "checkpoints",
         )
-        artifacts.csv("bootstrap_dev.csv", bootstrap_distribution)
-        artifacts.json("bootstrap_dev_summary.json", bootstrap_summary)
-
-    repeated_summary = None
-    repeated_config = config["evaluation"]["repeated_holdout"]
-    if repeated_config.get("enabled", False):
-        train_x, train_y = dataset.get_split("train", feature_set)
-        train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"]
-        repeated_metrics, assignments = repeated_fine_tune_holdout(
-            train_x,
-            train_y.astype(int),
-            train_ids,
-            int(repeated_config["repeats"]),
-            float(repeated_config["validation_fraction"]),
-            float(fine_tuning_config["validation_fraction"]),
-            int(repeated_config["seed_start"]),
-            lambda repeat_seed: _model_for_seed(config["model"], repeat_seed),
+        finetune_metadata = model.finetune_metadata()
+        tracker.record_fine_tuning(
+            prepared.training_y,
+            prepared.validation_y,
+            len(prepared.selection.columns),
+            fit_seconds,
+            finetune_metadata,
         )
-        repeated_summary = repeated_fine_tune_summary(repeated_metrics)
-        artifacts.csv("repeated_holdout_metrics.csv", repeated_metrics)
-        artifacts.json("repeated_holdout_summary.json", repeated_summary)
-        split_directory = artifacts.path / "repeated_splits"
-        split_directory.mkdir()
-        for seed, assignment in assignments.items():
-            assignment.to_csv(split_directory / f"seed_{seed:03d}.csv", index=False)
+        prediction, predict_seconds = timed_call(model.predict, prepared.dev_x)
+        probability, probability_seconds = timed_call(_positive_probability, model, prepared.dev_x)
+        metrics = classification_metrics(prepared.dev_y, prediction, probability)
+        tracker.record_development(metrics)
+        logger.info("development macro_f1=%s balanced_accuracy=%s", metrics["macro_f1"], metrics["balanced_accuracy"])
+        dev_ids = dataset.table.loc[dataset.table["split"] == "dev", "participant_id"]
+        predictions = classification_predictions(dev_ids, "dev", prediction, probability, prepared.dev_y)
+        artifacts.csv("predictions_dev.csv", predictions)
+        artifacts.json("finetune_metadata.json", finetune_metadata)
+        artifacts.json("metrics_dev.json", metrics)
+        artifacts.csv(
+            "metrics_dev.csv",
+            pd.DataFrame([{key: value for key, value in metrics.items() if isinstance(value, float)}]),
+        )
 
-    ended_at = datetime.now(UTC)
-    runtime = {
-        "device": device,
-        **cuda_peak_memory(),
-        "started_at": started_at.isoformat(),
-        "ended_at": ended_at.isoformat(),
-        "feature_build_seconds": feature_build_seconds,
-        "fit_seconds": fit_seconds,
-        "predict_seconds": predict_seconds + probability_seconds,
-        "total_seconds": time.perf_counter() - started,
-    }
-    artifacts.json("runtime.json", runtime)
-    artifacts.json("model.json", model.run_metadata())
-    artifacts.text(
-        "summary.md",
-        _summary(model.run_metadata(), validation, metrics, bootstrap_summary, repeated_summary, runtime),
-    )
-    return artifacts.path
+        bootstrap_summary = None
+        if config["bootstrap"].get("enabled", False):
+            bootstrap_distribution, bootstrap_summary = bootstrap_metrics(
+                prepared.dev_y,
+                prediction,
+                probability,
+                int(config["bootstrap"]["iterations"]),
+                float(config["bootstrap"]["confidence"]),
+                int(config["bootstrap"]["random_state"]),
+            )
+            artifacts.csv("bootstrap_dev.csv", bootstrap_distribution)
+            artifacts.json("bootstrap_dev_summary.json", bootstrap_summary)
+            tracker.record_bootstrap(bootstrap_summary)
+
+        repeated_summary = None
+        repeated_config = config["evaluation"]["repeated_holdout"]
+        if repeated_config.get("enabled", False):
+            train_x, train_y = dataset.get_split("train", feature_set)
+            train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"]
+            repeated_metrics, assignments = repeated_fine_tune_holdout(
+                train_x,
+                train_y.astype(int),
+                train_ids,
+                int(repeated_config["repeats"]),
+                float(repeated_config["validation_fraction"]),
+                float(fine_tuning_config["validation_fraction"]),
+                int(repeated_config["seed_start"]),
+                lambda repeat_seed: _model_for_seed(config["model"], repeat_seed),
+            )
+            repeated_summary = repeated_fine_tune_summary(repeated_metrics)
+            artifacts.csv("repeated_holdout_metrics.csv", repeated_metrics)
+            artifacts.json("repeated_holdout_summary.json", repeated_summary)
+            tracker.record_repeated_holdout(repeated_metrics, repeated_summary)
+            split_directory = artifacts.path / "repeated_splits"
+            split_directory.mkdir()
+            for seed, assignment in assignments.items():
+                assignment.to_csv(split_directory / f"seed_{seed:03d}.csv", index=False)
+
+        ended_at = datetime.now(UTC)
+        runtime = {
+            "device": device,
+            **cuda_peak_memory(),
+            "started_at": started_at.isoformat(),
+            "ended_at": ended_at.isoformat(),
+            "feature_build_seconds": feature_build_seconds,
+            "fit_seconds": fit_seconds,
+            "predict_seconds": predict_seconds + probability_seconds,
+            "total_seconds": time.perf_counter() - started,
+        }
+        model_metadata = model.run_metadata()
+        artifacts.json("runtime.json", runtime)
+        artifacts.json("model.json", model_metadata)
+        artifacts.text(
+            "summary.md",
+            _summary(model_metadata, validation, metrics, bootstrap_summary, repeated_summary, runtime),
+        )
+        tracker.complete(model_metadata, environment, runtime)
+        return artifacts.path
+    except Exception:
+        tracker.fail()
+        raise
