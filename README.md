@@ -1,6 +1,6 @@
 # DAIC-WOZ Tabular Foundation Models
 
-This project evaluates pretrained tabular foundation models on participant-level DAIC-WOZ behavioral features for binary depression prediction. Phase 1 implements TabICLv2 only; it does not include baselines, other foundation models, fine-tuning, raw audio/video, or text embeddings.
+This project evaluates fine-tuned TabICLv2 on participant-level DAIC-WOZ behavioral features for binary depression prediction. It does not provide a standalone zero-shot/in-context TabICL workflow, conventional baselines, other foundation models, raw audio/video, or text embeddings.
 
 DAIC-WOZ is licensed sensitive data and is not distributed by this repository. Keep it in the local, ignored `data/` directory or set `data.root` in a copied configuration. Never commit data, cached features, checkpoints, or experiment outputs.
 
@@ -36,39 +36,41 @@ Source patterns, labels, aggregation, and outputs are configuration values. Data
 
 ```bash
 uv run python -m daic_foundation_tab.cli inspect \
-  --config configs/experiments/tabiclv2_audio_visual.yaml
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
 ```
 
 The strict default requires every requested modality. The current local copy lacks all requested sources for one development participant, so the complete-cohort presets explicitly exclude and audit that participant:
 
 ```bash
 uv run python -m daic_foundation_tab.cli build-features \
-  --config configs/experiments/tabiclv2_audio_visual_complete_cohort.yaml
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
 
 uv run python -m daic_foundation_tab.cli validate \
-  --config configs/experiments/tabiclv2_audio_visual_complete_cohort.yaml
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
 ```
 
-## Phase 1 experiments
+## Fine-tuning experiments
 
-Start with the non-final smoke run. It uses one TabICLv2 estimator without bootstrap or repeated holdouts:
+Start with the non-final one-epoch smoke run. It disables bootstrap and repeated holdouts:
 
 ```bash
 uv run python -m daic_foundation_tab.cli run \
-  --config configs/experiments/tabiclv2_audio_visual_complete_cohort_smoke.yaml
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort_smoke.yaml
 ```
 
-After confirming checkpoint loading, run the primary official train-to-development experiment and the modality ablations:
+The default fine-tuning profile uses up to 50 epochs, early stopping selected by train-only validation ROC-AUC, and only retains `checkpoints/best.ckpt`. The official development split is never used for training, early stopping, feature selection, or checkpoint selection.
+
+After confirming checkpoint loading, run the full modality ablations:
 
 ```bash
 uv run python -m daic_foundation_tab.cli run \
-  --config configs/experiments/tabiclv2_audio_visual_complete_cohort.yaml
+  --config configs/experiments/tabiclv2_ft_audio_visual_complete_cohort.yaml
 
 uv run python -m daic_foundation_tab.cli run \
-  --config configs/experiments/tabiclv2_audio_complete_cohort.yaml
+  --config configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml
 
 uv run python -m daic_foundation_tab.cli run \
-  --config configs/experiments/tabiclv2_visual_complete_cohort.yaml
+  --config configs/experiments/tabiclv2_ft_visual_complete_cohort.yaml
 ```
 
 Compare saved development results with:
@@ -79,6 +81,8 @@ uv run python -m daic_foundation_tab.cli compare outputs/<run-a> outputs/<run-b>
 
 Every participant becomes exactly one row after temporal mean/std pooling. Frame, timestamp, confidence, success, participant ID, PHQ-8 scores/items, labels, and targets never enter the feature matrix. The binary target is derived from `PHQ8_Score >= 10`; supplied binary labels are audited but not used.
 
-`TabICLClassifier.fit()` stores the context table for pretrained in-context inference. It does not train a foundation model from scratch. Each final result directory contains the resolved config, environment, feature manifest, reconciliation report, validation report, development predictions/metrics, uncertainty artifacts, runtime/VRAM metadata, and a cautious summary. Test mode produces predictions only after a configuration is frozen; it does not compute test metrics.
+Each run creates a reproducible stratified 80/20 split from official train. Feature filtering is fit on the 80% fine-tuning partition only, and its columns are then applied to early-stopping validation, dev, and test data. Repeated internal holdouts use a nested train-only early-stopping split for every outer evaluation split.
 
-DAIC-WOZ is an extreme-small-N dataset. Phase 1 is a leakage-safe feasibility study and must not be presented as a clinical-use, superiority, or state-of-the-art claim.
+Each final result directory contains the resolved config, environment, feature manifest, reconciliation report, validation report, `finetune_split.csv`, `finetune_metadata.json`, the retained best checkpoint, development predictions/metrics, uncertainty artifacts, runtime/VRAM metadata, and a cautious summary. Test prediction generation is intentionally disabled until a separate frozen full-data finalization workflow is implemented.
+
+DAIC-WOZ is an extreme-small-N dataset. Fine-tuning is a leakage-safe feasibility study and must not be presented as a clinical-use, superiority, or state-of-the-art claim.
