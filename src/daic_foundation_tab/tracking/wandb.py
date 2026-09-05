@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from dotenv import load_dotenv
 
 from .artifacts import RunArtifacts
 
@@ -210,6 +211,7 @@ class WandbTracker:
             config=sanitized_wandb_config(config, dataset_cache_key, study_id),
         )
         if tracker.enabled and tracker.mode != "disabled":
+            load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
             import wandb
 
             experiment = config["experiment"]

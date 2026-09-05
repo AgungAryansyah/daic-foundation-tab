@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -206,6 +207,19 @@ def test_tracker_logs_only_cohort_level_research_records(monkeypatch, tmp_path) 
     assert record["artifact_references"] == [
         {"name": fake_wandb.run.artifacts[0].name, "type": "research-record"}
     ]
+
+
+def test_tracker_loads_wandb_key_from_project_dotenv(monkeypatch, tmp_path) -> None:
+    fake_wandb = _FakeWandb()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    (tmp_path / ".env").write_text("WANDB_API_KEY=test-key\n", encoding="utf-8")
+    artifacts = RunArtifacts(tmp_path / "outputs", "tabiclv2_ft", "audio", 42)
+
+    WandbTracker.start(_config(), artifacts, _validation(), "cache-key")
+
+    assert os.environ["WANDB_API_KEY"] == "test-key"
 
 
 def test_disabled_tracker_does_not_initialize_wandb(tmp_path) -> None:
