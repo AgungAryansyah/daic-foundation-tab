@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol, Self
 
@@ -15,6 +16,7 @@ class FineTunableClassifier(Protocol):
         validation_features: pd.DataFrame,
         validation_target: pd.Series,
         checkpoint_directory: Path,
+        epoch_callback: Callable[[Mapping[str, float]], None] | None = None,
     ) -> Self: ...
 
     def predict(self, features: pd.DataFrame) -> object: ...

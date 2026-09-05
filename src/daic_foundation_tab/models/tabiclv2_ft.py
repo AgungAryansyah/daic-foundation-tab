@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable, Mapping
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,24 @@ import pandas as pd
 
 class TabICLv2FineTuningError(RuntimeError):
     pass
+
+
+class _EpochLogger:
+    def __init__(self, callback: Callable[[Mapping[str, float]], None]) -> None:
+        self._callback = callback
+
+    def setup(self, config: dict[str, Any]) -> None:
+        del config
+
+    def log_step(self, metrics: dict[str, float], step: int) -> None:
+        del metrics, step
+
+    def log_epoch(self, metrics: dict[str, float], step: int) -> None:
+        del step
+        self._callback(metrics)
+
+    def finish(self) -> None:
+        pass
 
 
 class TabICLv2FineTunedModel:
@@ -42,6 +61,7 @@ class TabICLv2FineTunedModel:
         validation_features: pd.DataFrame,
         validation_target: pd.Series,
         checkpoint_directory: Path,
+        epoch_callback: Callable[[Mapping[str, float]], None] | None = None,
     ) -> TabICLv2FineTunedModel:
         self.validate_input(features)
         self.validate_input(validation_features)
@@ -55,7 +75,19 @@ class TabICLv2FineTunedModel:
         try:
             from tabicl import FinetunedTabICLClassifier
 
-            self._estimator = FinetunedTabICLClassifier(**self._constructor_parameters())
+            if epoch_callback is None:
+                self._estimator = FinetunedTabICLClassifier(**self._constructor_parameters())
+            else:
+                epoch_logger = _EpochLogger(epoch_callback)
+
+                class _TrackedFinetunedTabICLClassifier(FinetunedTabICLClassifier):
+                    def _make_experiment_logger(self) -> _EpochLogger:
+                        # This private TabICL hook is the only available path to its epoch metrics.
+                        return epoch_logger
+
+                self._estimator = _TrackedFinetunedTabICLClassifier(
+                    **self._constructor_parameters()
+                )
             self._estimator.fit(
                 features,
                 target,

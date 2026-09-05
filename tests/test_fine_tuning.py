@@ -69,6 +69,7 @@ def test_fine_tuned_adapter_passes_explicit_validation_data(monkeypatch, tmp_pat
     )
     features = pd.DataFrame({"feature": [0.0, 1.0, 2.0, 3.0]})
     target = pd.Series([0, 1, 0, 1])
+    reported = []
 
     model.fit(
         features.iloc[:2],
@@ -76,11 +77,16 @@ def test_fine_tuned_adapter_passes_explicit_validation_data(monkeypatch, tmp_pat
         validation_features=features.iloc[2:],
         validation_target=target.iloc[2:],
         checkpoint_directory=tmp_path / "checkpoints",
+        epoch_callback=lambda metrics: reported.append(dict(metrics)),
     )
 
     instance = _FakeFineTuner.instances[0]
     assert instance.parameters["checkpoint_version"] == "checkpoint.ckpt"
     assert instance.fit_arguments[2].equals(features.iloc[2:])
+    instance._make_experiment_logger().log_epoch(
+        {"train/epoch": 0, "train/mean_loss": 0.5, "val/roc_auc": 0.75}, step=1
+    )
+    assert reported == [{"train/epoch": 0, "train/mean_loss": 0.5, "val/roc_auc": 0.75}]
     assert model.finetune_metadata()["best_validation_metric"] == 0.75
 
 

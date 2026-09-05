@@ -12,9 +12,20 @@ from .helpers import write_synthetic_dataset
 
 
 class _FakeModel:
-    def fit(self, features, target, *, validation_features, validation_target, checkpoint_directory):
+    def fit(
+        self,
+        features,
+        target,
+        *,
+        validation_features,
+        validation_target,
+        checkpoint_directory,
+        epoch_callback=None,
+    ):
         checkpoint_directory.mkdir(parents=True, exist_ok=True)
         (checkpoint_directory / "best.ckpt").write_bytes(b"checkpoint")
+        if epoch_callback is not None:
+            epoch_callback({"train/epoch": 0, "train/mean_loss": 0.8, "val/roc_auc": 0.75})
         return self
 
     def predict(self, features):
@@ -54,6 +65,9 @@ class _FakeTracker:
 
     def record_fine_tuning(self, *args):
         self.calls.append(("fine_tuning", args))
+
+    def record_fine_tuning_epoch(self, *args):
+        self.calls.append(("fine_tuning_epoch", args))
 
     def record_development(self, *args):
         self.calls.append(("development", args))
@@ -96,6 +110,7 @@ def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     assert output.is_dir()
     assert [call[0] for call in tracker.calls] == [
         "start",
+        "fine_tuning_epoch",
         "fine_tuning",
         "development",
         "complete",

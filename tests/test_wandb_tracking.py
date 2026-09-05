@@ -28,12 +28,18 @@ class _FakeRun:
         self.id = "run-123"
         self.url = "https://wandb.example/run-123"
         self.logs = []
+        self.log_steps = []
         self.summary = {}
+        self.metric_definitions = []
         self.artifacts = []
         self.finished = []
 
-    def log(self, values) -> None:
+    def log(self, values, step=None) -> None:
         self.logs.append(values)
+        self.log_steps.append(step)
+
+    def define_metric(self, *args, **kwargs) -> None:
+        self.metric_definitions.append((args, kwargs))
 
     def log_artifact(self, artifact) -> None:
         self.artifacts.append(artifact)
@@ -163,6 +169,9 @@ def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeyp
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
     artifacts = RunArtifacts(tmp_path, "tabiclv2_ft", "audio", 42)
     tracker = WandbTracker.start(_config(), artifacts, _validation(), "cache-key")
+    tracker.record_fine_tuning_epoch(
+        {"train/epoch": 0, "train/mean_loss": 0.8, "val/roc_auc": 0.7}
+    )
     tracker.record_fine_tuning(
         pd.Series([0, 1, 0, 1]),
         pd.Series([0, 1]),
@@ -202,9 +211,16 @@ def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeyp
     logged_keys = {key for values in fake_wandb.run.logs for key in values}
     assert not any(key.startswith("data/") for key in logged_keys)
     assert "fine_tuning/best_validation_metric" in logged_keys
+    assert "fine_tuning/train/mean_loss" in logged_keys
+    assert "fine_tuning/val/roc_auc" in logged_keys
     assert "development/macro_f1" in logged_keys
     assert "fine_tuning/training/participants" not in logged_keys
     assert fake_wandb.run.summary["fine_tuning/best_validation_metric"] == 0.75
+    assert fake_wandb.run.summary["fine_tuning/epoch"] == 1
+    assert fake_wandb.run.metric_definitions == [
+        (("fine_tuning/epoch",), {"hidden": True}),
+        (("fine_tuning/*",), {"step_metric": "fine_tuning/epoch"}),
+    ]
     assert fake_wandb.run.summary["development/macro_f1"] == 0.6
     assert len(fake_wandb.run.artifacts) == 1
     uploaded_names = {name for _, name in fake_wandb.run.artifacts[0].files}
@@ -221,6 +237,12 @@ def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeyp
         (artifacts.path / "wandb_research" / "data_card.json").read_text(encoding="utf-8")
     )
     assert data_card["splits"]["train"]["participants"] == 10
+    results = json.loads(
+        (artifacts.path / "wandb_research" / "results.json").read_text(encoding="utf-8")
+    )
+    assert results["fine_tuning_history"] == [
+        {"epoch": 1, "train/mean_loss": 0.8, "val/roc_auc": 0.7}
+    ]
     record = json.loads((artifacts.path / "wandb_run.json").read_text(encoding="utf-8"))
     assert record["status"] == "finished"
     assert record["artifact_references"] == [

@@ -175,6 +175,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
             validation_features=prepared.validation_x,
             validation_target=prepared.validation_y,
             checkpoint_directory=artifacts.path / "checkpoints",
+            epoch_callback=tracker.record_fine_tuning_epoch,
         )
         finetune_metadata = model.finetune_metadata()
         tracker.record_fine_tuning(

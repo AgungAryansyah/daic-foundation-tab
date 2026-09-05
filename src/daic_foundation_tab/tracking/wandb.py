@@ -244,6 +244,10 @@ class WandbTracker:
                     x_save_requirements=False,
                 ),
             )
+            tracker.run.define_metric("fine_tuning/epoch", hidden=True)
+            tracker.run.define_metric(
+                "fine_tuning/*", step_metric="fine_tuning/epoch"
+            )
         tracker._write_run_record("running" if tracker.run is not None else "disabled")
         return tracker
 
@@ -296,6 +300,20 @@ class WandbTracker:
                 "best_validation_metric": metadata.get("best_validation_metric"),
             },
         )
+
+    def record_fine_tuning_epoch(self, metrics: Mapping[str, float]) -> None:
+        epoch = metrics.get("train/epoch")
+        if not isinstance(epoch, (int, float)):
+            return
+        values = {
+            "epoch": int(epoch) + 1,
+            **{key: value for key, value in metrics.items() if key != "train/epoch"},
+        }
+        self.results.setdefault("fine_tuning_history", []).append(_json_value(values))
+        if self.run is not None:
+            scalars = _scalar_values("fine_tuning", values)
+            self.run.log(scalars, step=int(epoch) + 1)
+            self.run.summary.update(scalars)
 
     def record_development(self, metrics: Mapping[str, Any]) -> None:
         scalar_metrics = _scalar_values("", metrics)
