@@ -200,8 +200,14 @@ def test_tracker_logs_only_cohort_level_research_records(monkeypatch, tmp_path) 
     assert len(fake_wandb.run.artifacts) == 1
     uploaded_names = {name for _, name in fake_wandb.run.artifacts[0].files}
     assert uploaded_names == {"data_card.json", "results.json", "settings.json"}
+    artifact_contents = "\n".join(
+        Path(path).read_text(encoding="utf-8") for path, _ in fake_wandb.run.artifacts[0].files
+    )
     for path, _ in fake_wandb.run.artifacts[0].files:
         assert "/private" not in Path(path).read_text(encoding="utf-8")
+    assert "participant_id" not in artifact_contents
+    assert "checkpoint_path" not in artifact_contents
+    assert "predictions_dev.csv" not in artifact_contents
     record = json.loads((artifacts.path / "wandb_run.json").read_text(encoding="utf-8"))
     assert record["status"] == "finished"
     assert record["artifact_references"] == [
@@ -220,6 +226,19 @@ def test_tracker_loads_wandb_key_from_project_dotenv(monkeypatch, tmp_path) -> N
     WandbTracker.start(_config(), artifacts, _validation(), "cache-key")
 
     assert os.environ["WANDB_API_KEY"] == "test-key"
+
+
+def test_tracker_supports_offline_mode(monkeypatch, tmp_path) -> None:
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    artifacts = RunArtifacts(tmp_path, "tabiclv2_ft", "audio", 42)
+
+    tracker = WandbTracker.start(_config(mode="offline"), artifacts, _validation(), "cache-key")
+    tracker.complete({}, {}, {"total_seconds": 1.0})
+
+    assert fake_wandb.init_arguments["mode"] == "offline"
+    assert fake_wandb.init_arguments["dir"] == artifacts.path
+    assert fake_wandb.run.finished == [0]
 
 
 def test_disabled_tracker_does_not_initialize_wandb(tmp_path) -> None:
