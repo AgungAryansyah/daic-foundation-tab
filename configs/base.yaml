@@ -74,3 +74,11 @@ bootstrap:
 
 logging:
   level: INFO
+
+tracking:
+  wandb:
+    enabled: true
+    project: daic-foundation-tab
+    entity: null
+    mode: online
+    tags: []

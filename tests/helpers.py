@@ -62,6 +62,15 @@ def experiment_config(dataset_root: Path, cache_root: Path) -> dict:
         },
         "bootstrap": {"enabled": False},
         "logging": {"level": "INFO"},
+        "tracking": {
+            "wandb": {
+                "enabled": True,
+                "project": "daic-foundation-tab",
+                "entity": None,
+                "mode": "disabled",
+                "tags": [],
+            }
+        },
     }
 
 

@@ -32,3 +32,21 @@ def test_rejects_fine_tuned_test_predictions() -> None:
 
     with pytest.raises(ConfigError, match="finalization"):
         validate_config(config)
+
+
+def test_rejects_invalid_wandb_mode() -> None:
+    project_root = Path(__file__).parents[1]
+    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
+    config["tracking"]["wandb"]["mode"] = "shared"
+
+    with pytest.raises(ConfigError, match="online, offline, or disabled"):
+        validate_config(config)
+
+
+def test_rejects_malformed_wandb_configuration() -> None:
+    project_root = Path(__file__).parents[1]
+    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
+    config["tracking"]["wandb"] = []
+
+    with pytest.raises(ConfigError, match="must be a mapping"):
+        validate_config(config)

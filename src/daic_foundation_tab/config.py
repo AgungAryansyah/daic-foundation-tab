@@ -54,7 +54,15 @@ def load_config(path: str | Path, *, _validate: bool = True) -> dict[str, Any]:
 
 
 def validate_config(config: Mapping[str, Any]) -> None:
-    for section in ("project", "data", "aggregation", "experiment", "model", "evaluation"):
+    for section in (
+        "project",
+        "data",
+        "aggregation",
+        "experiment",
+        "model",
+        "evaluation",
+        "tracking",
+    ):
         if section not in config:
             raise ConfigError(f"Missing required configuration section: {section}")
 
@@ -72,6 +80,26 @@ def validate_config(config: Mapping[str, Any]) -> None:
     validation_fraction = fine_tuning.get("validation_fraction")
     if not isinstance(validation_fraction, (int, float)) or not 0 < validation_fraction < 1:
         raise ConfigError("evaluation.fine_tuning.validation_fraction must be between zero and one")
+
+    tracking = config["tracking"]
+    if not isinstance(tracking, Mapping):
+        raise ConfigError("tracking must be a mapping")
+    wandb = tracking.get("wandb")
+    if not isinstance(wandb, Mapping):
+        raise ConfigError("tracking.wandb must be a mapping")
+    if not isinstance(wandb.get("enabled"), bool):
+        raise ConfigError("tracking.wandb.enabled must be a boolean")
+    if not isinstance(wandb.get("project"), str) or not wandb["project"].strip():
+        raise ConfigError("tracking.wandb.project must be a non-empty string")
+    if wandb.get("entity") is not None and (
+        not isinstance(wandb["entity"], str) or not wandb["entity"].strip()
+    ):
+        raise ConfigError("tracking.wandb.entity must be null or a non-empty string")
+    if wandb.get("mode") not in {"online", "offline", "disabled"}:
+        raise ConfigError("tracking.wandb.mode must be online, offline, or disabled")
+    tags = wandb.get("tags")
+    if not isinstance(tags, list) or not all(isinstance(tag, str) and tag.strip() for tag in tags):
+        raise ConfigError("tracking.wandb.tags must be a list of non-empty strings")
 
 
 def write_config(config: Mapping[str, Any], path: str | Path) -> None:
