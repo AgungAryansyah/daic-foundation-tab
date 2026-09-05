@@ -71,6 +71,20 @@ def _validate(config: dict) -> Path:
     return output
 
 
+def _markdown_table(table: pd.DataFrame) -> str:
+    columns = [str(column) for column in table.columns]
+
+    def cell(value: object) -> str:
+        return str(value).replace("|", "\\|").replace("\n", "<br>")
+
+    lines = [
+        f"| {' | '.join(columns)} |",
+        f"| {' | '.join('---' for _ in columns)} |",
+    ]
+    lines.extend(f"| {' | '.join(cell(value) for value in row)} |" for row in table.itertuples(index=False, name=None))
+    return "\n".join(lines)
+
+
 def _compare(runs: list[Path], output: Path | None) -> Path:
     rows = []
     for run in runs:
@@ -83,7 +97,7 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
     destination.mkdir(parents=True, exist_ok=False)
     comparison = pd.DataFrame(rows)
     comparison.to_csv(destination / "comparison.csv", index=False)
-    (destination / "comparison.md").write_text(comparison.to_markdown(index=False) + "\n", encoding="utf-8")
+    (destination / "comparison.md").write_text(_markdown_table(comparison) + "\n", encoding="utf-8")
     print(destination)
     return destination
 
