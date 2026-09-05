@@ -31,7 +31,7 @@ cp .env.example .env
 
 Set `WANDB_API_KEY` in `.env`. The tracker loads that file without overriding an already exported environment variable, and neither form of the key is written to a run configuration, output, or artifact.
 
-Each run is grouped by a stable study fingerprint and tagged by model, modality, task, and smoke/full profile. W&B receives a sanitized configuration, dataset fingerprint, cohort-level train/validation/development/test information, fine-tuning selection metadata, aggregate metrics, uncertainty summaries, repeated-holdout metric rows, runtime, environment, and one immutable `research-record` artifact.
+Each run is grouped by a stable study fingerprint and tagged by model, modality, task, and smoke/full profile. Its W&B dashboard prioritizes fine-tuning selection, development metrics, uncertainty summaries, repeated-holdout summaries, and runtime. Those phase-completion values are also explicit run-summary fields for comparing runs. The immutable `research-record` artifact retains the sanitized configuration, dataset fingerprint, cohort-level train/validation/development/test information, repeated-holdout metric rows, runtime, and environment.
 
 Participant IDs, raw labels or targets, feature values/manifests, split assignments, predictions, raw inputs, local paths, and checkpoints stay in the ignored local run directory and are never uploaded. Test predictions remain disabled; W&B records only test-cohort availability and shape.
 
