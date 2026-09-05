@@ -73,6 +73,8 @@ def _fingerprint(config: dict[str, Any], discovery: DiscoveryResult) -> str:
                 )
     payload = {
         "source_groups": config["data"]["source_groups"],
+        "modalities": config["modalities"],
+        "missing_modality_policy": config["data"].get("missing_modality_policy"),
         "aggregation": config["aggregation"],
         "sources": sources,
     }
@@ -100,6 +102,7 @@ def _build_dataset(config: dict[str, Any], labels: LabelLoadResult, discovery: D
         reconciliation_row: dict[str, Any] = {
             "participant_id": participant.participant_id,
             "split": label["split"],
+            "target_binary": label["target_binary"],
             "has_label": bool(pd.notna(label["target_binary"])) or label["split"] == "test",
         }
         missing: list[str] = []

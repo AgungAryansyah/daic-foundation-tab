@@ -1,0 +1,8 @@
+extends:
+  - tabiclv2_audio_visual.yaml
+
+data:
+  missing_modality_policy: exclude
+
+experiment:
+  name: tabiclv2_binary_audio_visual_complete_cohort_mean_std

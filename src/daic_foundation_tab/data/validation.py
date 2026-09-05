@@ -7,7 +7,6 @@ import pandas as pd
 
 from .dataset import DatasetError, ParticipantDataset
 
-
 EXACT_DENYLIST = {
     "phq",
     "phq8",
@@ -75,7 +74,9 @@ def fit_feature_selection(train_x: pd.DataFrame) -> TrainFeatureSelection:
     )
 
 
-def validate_dataset(dataset: ParticipantDataset, feature_set: str) -> dict[str, Any]:
+def validate_dataset(
+    dataset: ParticipantDataset, feature_set: str, max_exclusion_fraction: float = 0.05
+) -> dict[str, Any]:
     if dataset.table["participant_id"].duplicated().any():
         raise DatasetError("Final table contains duplicate participant rows")
     if dataset.manifest["column"].duplicated().any():
@@ -103,6 +104,24 @@ def validate_dataset(dataset: ParticipantDataset, feature_set: str) -> dict[str,
         }
     train_x, _ = dataset.get_split("train", feature_set)
     selection = fit_feature_selection(train_x)
+    exclusion_report: dict[str, Any] = {}
+    exclusion_warnings: list[str] = []
+    reconciliation_columns = {"split", "included", "target_binary"}
+    if reconciliation_columns.issubset(dataset.reconciliation.columns):
+        for split, reconciliation in dataset.reconciliation.groupby("split", dropna=False):
+            excluded = reconciliation.loc[~reconciliation["included"]]
+            fraction = float(len(excluded) / len(reconciliation)) if len(reconciliation) else 0.0
+            exclusion_report[str(split)] = {
+                "participants": len(reconciliation),
+                "excluded": len(excluded),
+                "exclusion_fraction": fraction,
+                "excluded_depressed": int(excluded["target_binary"].eq(1).sum()),
+                "excluded_non_depressed": int(excluded["target_binary"].eq(0).sum()),
+            }
+            if fraction > max_exclusion_fraction:
+                exclusion_warnings.append(
+                    f"{split} exclusion fraction {fraction:.3f} exceeds {max_exclusion_fraction:.3f}"
+                )
     return {
         "feature_set": feature_set,
         "split_statistics": split_report,
@@ -111,6 +130,8 @@ def validate_dataset(dataset: ParticipantDataset, feature_set: str) -> dict[str,
         "dropped_constant": selection.dropped_constant,
         "near_constant": selection.near_constant,
         "label_audit": dataset.label_audit,
+        "exclusions": exclusion_report,
+        "warnings": exclusion_warnings,
     }
 
 

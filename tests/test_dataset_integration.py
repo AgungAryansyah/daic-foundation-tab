@@ -19,3 +19,15 @@ def test_builds_one_participant_row_and_complete_manifest(tmp_path) -> None:
     assert len(prepared.dev_x) == 2
     assert len(prepared.test_x) == 2
     assert report["split_statistics"]["train"]["participants"] == 6
+
+
+def test_explicit_complete_cohort_policy_logs_missing_modalities(tmp_path) -> None:
+    config = write_synthetic_dataset(tmp_path / "dataset")
+    (tmp_path / "dataset" / "data" / "400_COVAREP.csv").unlink()
+    config["data"]["missing_modality_policy"] = "exclude"
+
+    dataset = build_or_load_dataset(config)
+
+    excluded = dataset.reconciliation.loc[dataset.reconciliation["participant_id"] == "400"].iloc[0]
+    assert not excluded["included"]
+    assert excluded["exclusion_reason"] == "missing covarep"

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import subprocess
 import time
 from pathlib import Path
@@ -13,7 +12,11 @@ import pandas as pd
 
 from daic_foundation_tab.config import write_config
 from daic_foundation_tab.data import build_or_load_dataset
-from daic_foundation_tab.data.validation import fit_feature_selection, prepare_splits, validate_dataset
+from daic_foundation_tab.data.validation import (
+    fit_feature_selection,
+    prepare_splits,
+    validate_dataset,
+)
 from daic_foundation_tab.evaluation.bootstrap import bootstrap_metrics
 from daic_foundation_tab.evaluation.metrics import classification_metrics
 from daic_foundation_tab.evaluation.predictions import classification_predictions
@@ -26,7 +29,11 @@ from daic_foundation_tab.models.base import TabularClassifier
 from daic_foundation_tab.tracking.artifacts import RunArtifacts
 from daic_foundation_tab.tracking.environment import environment_metadata
 from daic_foundation_tab.tracking.logging import configure_run_logger
-from daic_foundation_tab.tracking.runtime import cuda_peak_memory, reset_cuda_peak_memory, timed_call
+from daic_foundation_tab.tracking.runtime import (
+    cuda_peak_memory,
+    reset_cuda_peak_memory,
+    timed_call,
+)
 
 
 def _positive_probability(model: TabularClassifier, features: pd.DataFrame) -> np.ndarray:
@@ -102,7 +109,9 @@ def run_experiment(config: dict[str, Any]) -> Path:
     started = time.perf_counter()
     dataset = build_or_load_dataset(config)
     feature_set = config["experiment"]["feature_set"]
-    validation = validate_dataset(dataset, feature_set)
+    validation = validate_dataset(
+        dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
+    )
     prepared = prepare_splits(dataset, feature_set)
     artifacts = RunArtifacts(
         config["project"]["output_root"],
@@ -118,8 +127,10 @@ def run_experiment(config: dict[str, Any]) -> Path:
     write_config(config, artifacts.path / "config_resolved.yaml")
     artifacts.json("environment.json", {**environment_metadata(), "git_commit": _git_commit()})
     artifacts.json("dataset_summary.json", validation["split_statistics"])
+    artifacts.json("dataset_inventory.json", dataset.inventory)
     artifacts.json("validation_report.json", validation)
     artifacts.csv("feature_manifest.csv", dataset.manifest)
+    artifacts.csv("participant_reconciliation.csv", dataset.reconciliation)
     artifacts.csv(
         "dropped_features.csv",
         pd.DataFrame(
