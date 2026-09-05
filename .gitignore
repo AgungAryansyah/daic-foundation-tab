@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Licensed local DAIC-WOZ inputs and generated experiment artifacts
+data/
+cache/
+outputs/
+*.parquet
+*.ckpt
