@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from daic_foundation_tab import runner
+from daic_foundation_tab.tracking.runtime import CudaRequirementError
 
 from .helpers import write_synthetic_dataset
 
@@ -70,10 +71,22 @@ class _FakeTracker:
         self.calls.append(("fail",))
 
 
+def _mock_gpu_runtime(monkeypatch) -> None:
+    monkeypatch.setattr(runner, "require_cuda_device", lambda device: device)
+    monkeypatch.setattr(runner, "reset_cuda_peak_memory", lambda device: None)
+    monkeypatch.setattr(
+        runner,
+        "cuda_peak_memory",
+        lambda device: {"peak_cuda_allocated_mb": 1.0, "peak_cuda_reserved_mb": 2.0},
+    )
+    monkeypatch.setattr(runner, "environment_metadata", lambda device: {"cuda_device": device})
+
+
 def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     _FakeTracker.instances.clear()
     config = write_synthetic_dataset(tmp_path / "data")
     config["_config_path"] = "synthetic.yaml"
+    _mock_gpu_runtime(monkeypatch)
     monkeypatch.setattr(runner, "WandbTracker", _FakeTracker)
     monkeypatch.setattr(runner, "_model_for_seed", lambda *_: _FakeModel())
 
@@ -95,6 +108,7 @@ def test_runner_marks_wandb_failed_when_fine_tuning_errors(monkeypatch, tmp_path
     _FakeTracker.instances.clear()
     config = write_synthetic_dataset(tmp_path / "data")
     config["_config_path"] = "synthetic.yaml"
+    _mock_gpu_runtime(monkeypatch)
     monkeypatch.setattr(runner, "WandbTracker", _FakeTracker)
     monkeypatch.setattr(runner, "_model_for_seed", lambda *_: _FailingModel())
 
@@ -102,3 +116,24 @@ def test_runner_marks_wandb_failed_when_fine_tuning_errors(monkeypatch, tmp_path
         runner.run_experiment(config)
 
     assert [call[0] for call in _FakeTracker.instances[0].calls] == ["start", "fail"]
+
+
+def test_runner_rejects_cpu_before_building_dataset(monkeypatch, tmp_path) -> None:
+    config = write_synthetic_dataset(tmp_path / "data")
+    built = False
+
+    def fail_preflight(device: str) -> str:
+        raise CudaRequirementError(f"CUDA unavailable for {device}")
+
+    def unexpected_build(config):
+        nonlocal built
+        built = True
+        raise AssertionError("dataset build must not run")
+
+    monkeypatch.setattr(runner, "require_cuda_device", fail_preflight)
+    monkeypatch.setattr(runner, "build_or_load_dataset", unexpected_build)
+
+    with pytest.raises(CudaRequirementError, match="CUDA unavailable"):
+        runner.run_experiment(config)
+
+    assert not built

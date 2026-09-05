@@ -90,6 +90,7 @@ def sanitized_wandb_config(
             "feature_set": config["experiment"]["feature_set"],
         },
         "model": _redact_paths(config["model"]),
+        "runtime": _json_value(config["runtime"]),
         "aggregation": _json_value(config["aggregation"]),
         "evaluation": _json_value(config["evaluation"]),
         "bootstrap": _json_value(config["bootstrap"]),

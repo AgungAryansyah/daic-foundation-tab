@@ -64,6 +64,7 @@ class _FakeWandb:
 def _config(mode: str = "online") -> dict:
     return {
         "project": {"seed": 42, "output_root": "/private/outputs", "cache_root": "/private/cache"},
+        "runtime": {"device": "cuda:0", "require_cuda": True},
         "data": {
             "root": "/private/data",
             "labels": {"train": "/private/train.csv"},

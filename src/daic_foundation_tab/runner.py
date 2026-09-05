@@ -28,6 +28,7 @@ from daic_foundation_tab.tracking.environment import environment_metadata
 from daic_foundation_tab.tracking.logging import configure_run_logger
 from daic_foundation_tab.tracking.runtime import (
     cuda_peak_memory,
+    require_cuda_device,
     reset_cuda_peak_memory,
     timed_call,
 )
@@ -102,6 +103,7 @@ def _model_for_seed(model_config: dict[str, Any], random_state: int) -> FineTuna
 
 
 def run_experiment(config: dict[str, Any]) -> Path:
+    device = require_cuda_device(config["runtime"]["device"])
     started_at = datetime.now(UTC)
     started = time.perf_counter()
     seed = int(config["project"]["seed"])
@@ -134,7 +136,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
     logger.info("feature_count=%s", len(prepared.selection.columns))
     write_config(config, artifacts.path / "config_resolved.yaml")
     environment = {
-        **environment_metadata(),
+        **environment_metadata(device),
         "git_commit": _git_commit(),
         "random_seeds": {
             "project": seed,
@@ -163,7 +165,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
 
     tracker = WandbTracker.start(config, artifacts, validation, dataset.cache_key)
     try:
-        device = reset_cuda_peak_memory()
+        reset_cuda_peak_memory(device)
         model = _model_for_seed(config["model"], seed)
         logger.info("model=%s checkpoint=%s device=%s", config["model"]["name"], config["model"]["checkpoint_version"], device)
         _, fit_seconds = timed_call(
@@ -238,7 +240,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
         ended_at = datetime.now(UTC)
         runtime = {
             "device": device,
-            **cuda_peak_memory(),
+            **cuda_peak_memory(device),
             "started_at": started_at.isoformat(),
             "ended_at": ended_at.isoformat(),
             "feature_build_seconds": feature_build_seconds,
