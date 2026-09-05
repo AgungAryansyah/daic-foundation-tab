@@ -6,15 +6,18 @@ DAIC-WOZ is licensed sensitive data and is not distributed by this repository. K
 
 ## Setup
 
-The project uses Python 3.13 and [uv](https://docs.astral.sh/uv/). Fine-tuning is supported only on the remote Linux x86_64 GPU server with an NVIDIA driver reporting CUDA 12.2. The lock installs PyTorch 2.5.1 with CUDA 12.1 runtime libraries; CPU-only PyTorch and CPU experiment execution are intentionally unsupported.
+The project uses Python 3.12 and [uv](https://docs.astral.sh/uv/). Fine-tuning is supported only on the remote Linux x86_64 GPU server with an NVIDIA driver reporting CUDA 12.2. The lock installs the CPython 3.12 Linux PyTorch 2.5.1 CUDA 12.1 wheel; CPU-only PyTorch and CPU experiment execution are intentionally unsupported.
 
 On the remote server, verify that the driver exposes the GPU, then synchronize the locked CUDA environment:
 
 ```bash
 nvidia-smi
-uv sync --group dev
-uv run python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
+python --version
+uv sync --group dev --python 3.12
+uv run --python 3.12 python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
 ```
+
+`python --version` must report Python 3.12 (the server's 3.12.9 is supported). The project rejects other Python minor versions, so `uv` cannot install an ABI-incompatible PyTorch wheel.
 
 Every `run` command requires `cuda:0` and exits before it reads data, creates output, or initializes W&B if CUDA is unavailable. The resolved run metadata records the selected device, CUDA runtime, GPU name, VRAM, and peak CUDA memory.
 
