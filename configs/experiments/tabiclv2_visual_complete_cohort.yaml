@@ -1,8 +1,0 @@
-extends:
-  - tabiclv2_visual.yaml
-
-data:
-  missing_modality_policy: exclude
-
-experiment:
-  name: tabiclv2_binary_visual_complete_cohort_mean_std

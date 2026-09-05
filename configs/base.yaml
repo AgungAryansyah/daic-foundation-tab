@@ -57,6 +57,9 @@ experiment:
 evaluation:
   threshold: 0.5
   test_predictions: false
+  fine_tuning:
+    validation_fraction: 0.2
+    validation_seed: 42
   repeated_holdout:
     enabled: true
     repeats: 30

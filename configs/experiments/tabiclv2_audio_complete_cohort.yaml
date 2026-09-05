@@ -1,8 +1,0 @@
-extends:
-  - tabiclv2_audio.yaml
-
-data:
-  missing_modality_policy: exclude
-
-experiment:
-  name: tabiclv2_binary_audio_complete_cohort_mean_std

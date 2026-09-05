@@ -1,0 +1,10 @@
+extends:
+  - ../base.yaml
+  - ../models/tabiclv2_ft.yaml
+
+data:
+  missing_modality_policy: exclude
+
+experiment:
+  name: tabiclv2_ft_binary_audio_complete_cohort_mean_std
+  feature_set: audio

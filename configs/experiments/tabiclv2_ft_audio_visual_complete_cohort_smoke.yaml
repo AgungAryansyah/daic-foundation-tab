@@ -1,0 +1,16 @@
+extends:
+  - tabiclv2_ft_audio_visual_complete_cohort.yaml
+
+experiment:
+  name: tabiclv2_ft_binary_audio_visual_complete_cohort_smoke
+
+model:
+  parameters:
+    epochs: 1
+
+evaluation:
+  repeated_holdout:
+    enabled: false
+
+bootstrap:
+  enabled: false

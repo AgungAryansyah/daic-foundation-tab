@@ -62,8 +62,16 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigError("Phase 1 supports classification only")
     if config["experiment"].get("feature_set") not in {"audio", "visual", "audio_visual"}:
         raise ConfigError("Phase 1 feature_set must be audio, visual, or audio_visual")
-    if config["model"].get("name") != "tabiclv2":
-        raise ConfigError("Phase 1 supports the tabiclv2 model only")
+    if config["model"].get("name") != "tabiclv2_ft":
+        raise ConfigError("Only tabiclv2_ft is supported; the standalone tabiclv2 ICL path was retired")
+    if config["evaluation"].get("test_predictions", False):
+        raise ConfigError("TabICLv2-FT test predictions require a separate frozen finalization workflow")
+    fine_tuning = config["evaluation"].get("fine_tuning")
+    if not isinstance(fine_tuning, Mapping):
+        raise ConfigError("TabICLv2-FT requires evaluation.fine_tuning settings")
+    validation_fraction = fine_tuning.get("validation_fraction")
+    if not isinstance(validation_fraction, (int, float)) or not 0 < validation_fraction < 1:
+        raise ConfigError("evaluation.fine_tuning.validation_fraction must be between zero and one")
 
 
 def write_config(config: Mapping[str, Any], path: str | Path) -> None:

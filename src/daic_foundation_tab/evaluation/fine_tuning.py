@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from daic_foundation_tab.data.validation import fit_feature_selection
+from daic_foundation_tab.data.dataset import ParticipantDataset
+from daic_foundation_tab.data.validation import TrainFeatureSelection, fit_feature_selection
 from daic_foundation_tab.evaluation.metrics import classification_metrics
 from daic_foundation_tab.models.base import FineTunableClassifier
 
@@ -18,6 +19,19 @@ from daic_foundation_tab.models.base import FineTunableClassifier
 class FineTunePartition:
     training_indices: np.ndarray
     validation_indices: np.ndarray
+    assignment: pd.DataFrame
+
+
+@dataclass(frozen=True)
+class PreparedFineTuneSplits:
+    training_x: pd.DataFrame
+    training_y: pd.Series
+    validation_x: pd.DataFrame
+    validation_y: pd.Series
+    dev_x: pd.DataFrame
+    dev_y: pd.Series
+    test_x: pd.DataFrame
+    selection: TrainFeatureSelection
     assignment: pd.DataFrame
 
 
@@ -52,6 +66,33 @@ def stratified_fine_tune_partition(
         }
     )
     return FineTunePartition(training_indices, validation_indices, assignment)
+
+
+def prepare_fine_tune_splits(
+    dataset: ParticipantDataset,
+    feature_set: str,
+    validation_fraction: float,
+    random_state: int,
+) -> PreparedFineTuneSplits:
+    train_x, train_y = dataset.get_split("train", feature_set)
+    dev_x, dev_y = dataset.get_split("dev", feature_set)
+    test_x, _ = dataset.get_split("test", feature_set)
+    train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"].reset_index(drop=True)
+    partition = stratified_fine_tune_partition(
+        train_y.reset_index(drop=True), train_ids, validation_fraction, random_state
+    )
+    selection = fit_feature_selection(train_x.iloc[partition.training_indices])
+    return PreparedFineTuneSplits(
+        training_x=train_x.iloc[partition.training_indices].reindex(columns=selection.columns),
+        training_y=train_y.iloc[partition.training_indices].astype(int),
+        validation_x=train_x.iloc[partition.validation_indices].reindex(columns=selection.columns),
+        validation_y=train_y.iloc[partition.validation_indices].astype(int),
+        dev_x=dev_x.reindex(columns=selection.columns),
+        dev_y=dev_y.astype(int),
+        test_x=test_x.reindex(columns=selection.columns),
+        selection=selection,
+        assignment=partition.assignment,
+    )
 
 
 def _positive_probability(model: FineTunableClassifier, features: pd.DataFrame) -> np.ndarray:
@@ -115,3 +156,17 @@ def repeated_fine_tune_holdout(
         evaluation_assignment["outer_seed"] = seed
         assignments[seed] = pd.concat([inner_assignment, evaluation_assignment], ignore_index=True)
     return pd.DataFrame(rows), assignments
+
+
+def repeated_fine_tune_summary(metrics: pd.DataFrame) -> dict[str, dict[str, float]]:
+    return {
+        column: {
+            "mean": float(metrics[column].mean()),
+            "std": float(metrics[column].std(ddof=0)),
+            "median": float(metrics[column].median()),
+            "p2_5": float(metrics[column].quantile(0.025)),
+            "p97_5": float(metrics[column].quantile(0.975)),
+        }
+        for column in metrics.columns
+        if column != "seed"
+    }

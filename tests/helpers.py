@@ -49,8 +49,17 @@ def experiment_config(dataset_root: Path, cache_root: Path) -> dict:
         },
         "aggregation": {"statistics": ["mean", "std"], "std_ddof": 0},
         "experiment": {"task": "classification", "feature_set": "audio_visual"},
-        "model": {"name": "tabiclv2", "checkpoint_version": "test", "parameters": {}},
-        "evaluation": {"threshold": 0.5, "repeated_holdout": {"enabled": False}},
+        "model": {
+            "name": "tabiclv2_ft",
+            "checkpoint_version": "test",
+            "parameters": {"eval_metric": "roc_auc", "random_state": 42},
+        },
+        "evaluation": {
+            "threshold": 0.5,
+            "test_predictions": False,
+            "fine_tuning": {"validation_fraction": 0.2, "validation_seed": 42},
+            "repeated_holdout": {"enabled": False},
+        },
         "bootstrap": {"enabled": False},
         "logging": {"level": "INFO"},
     }

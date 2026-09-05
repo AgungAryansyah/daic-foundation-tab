@@ -1,7 +1,0 @@
-extends:
-  - ../base.yaml
-  - ../models/tabiclv2.yaml
-
-experiment:
-  name: tabiclv2_binary_audio_visual_mean_std
-  feature_set: audio_visual

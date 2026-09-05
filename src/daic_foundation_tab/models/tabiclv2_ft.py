@@ -113,10 +113,13 @@ class TabICLv2FineTunedModel:
         checkpoint = self._checkpoint_directory / "best.ckpt"
         if not checkpoint.is_file():
             raise TabICLv2FineTuningError(f"Fine-tuning checkpoint was not saved: {checkpoint}")
-        digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        hasher = hashlib.sha256()
+        with checkpoint.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1 << 20), b""):
+                hasher.update(chunk)
         return {
             "checkpoint_path": str(checkpoint),
-            "checkpoint_sha256": digest,
+            "checkpoint_sha256": hasher.hexdigest(),
             "selection_metric": self._parameters["eval_metric"],
             "best_validation_metric": float(self._estimator._best_metric_),
         }
