@@ -17,7 +17,7 @@ dependencies = [
     "scikit-learn>=1.5",
     "scipy>=1.13",
     "tabicl[finetune]",
-    "torch>=2.2",
+    "torch==2.5.1+cu121",
     "wandb>=0.29",
 ]
 
@@ -45,9 +45,9 @@ line-length = 100
 target-version = "py313"
 
 [tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+torch = { index = "pytorch-cu121" }
 
 [[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
 explicit = true
