@@ -34,6 +34,24 @@ def test_rejects_fine_tuned_test_predictions() -> None:
         validate_config(config)
 
 
+def test_rejects_cpu_runtime() -> None:
+    project_root = Path(__file__).parents[1]
+    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
+    config["runtime"]["device"] = "cpu"
+
+    with pytest.raises(ConfigError, match="runtime.device"):
+        validate_config(config)
+
+
+def test_rejects_automatic_fine_tuning_device() -> None:
+    project_root = Path(__file__).parents[1]
+    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
+    config["model"]["parameters"]["device"] = "auto"
+
+    with pytest.raises(ConfigError, match="must match runtime.device"):
+        validate_config(config)
+
+
 def test_rejects_invalid_wandb_mode() -> None:
     project_root = Path(__file__).parents[1]
     config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")

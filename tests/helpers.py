@@ -11,6 +11,7 @@ from daic_foundation_tab.data.aggregation import COVAREP_COLUMNS
 def experiment_config(dataset_root: Path, cache_root: Path) -> dict:
     return {
         "project": {"seed": 42, "cache_root": str(cache_root), "output_root": str(cache_root / "outputs")},
+        "runtime": {"device": "cuda:0", "require_cuda": True},
         "data": {
             "root": str(dataset_root),
             "labels": {
@@ -52,7 +53,12 @@ def experiment_config(dataset_root: Path, cache_root: Path) -> dict:
         "model": {
             "name": "tabiclv2_ft",
             "checkpoint_version": "test",
-            "parameters": {"eval_metric": "roc_auc", "random_state": 42},
+            "parameters": {
+                "eval_metric": "roc_auc",
+                "random_state": 42,
+                "amp": True,
+                "device": "cuda:0",
+            },
         },
         "evaluation": {
             "threshold": 0.5,

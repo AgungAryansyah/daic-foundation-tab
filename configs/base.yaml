@@ -3,6 +3,10 @@ project:
   output_root: outputs
   cache_root: cache
 
+runtime:
+  device: cuda:0
+  require_cuda: true
+
 data:
   root: data
   labels:

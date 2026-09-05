@@ -64,7 +64,7 @@ def test_fine_tuned_adapter_passes_explicit_validation_data(monkeypatch, tmp_pat
     model = TabICLv2FineTunedModel(
         {
             "checkpoint_version": "checkpoint.ckpt",
-            "parameters": {"eval_metric": "roc_auc", "amp": False, "device": "cpu"},
+            "parameters": {"eval_metric": "roc_auc", "amp": True, "device": "cuda:0"},
         }
     )
     features = pd.DataFrame({"feature": [0.0, 1.0, 2.0, 3.0]})

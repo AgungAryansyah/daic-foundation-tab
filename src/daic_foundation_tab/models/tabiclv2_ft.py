@@ -21,15 +21,10 @@ class TabICLv2FineTunedModel:
 
     def _constructor_parameters(self) -> dict[str, Any]:
         parameters = dict(self._parameters)
-        if parameters.get("device") == "auto":
-            parameters["device"] = None
-        if parameters.get("amp") == "auto":
-            try:
-                import torch
-
-                parameters["amp"] = torch.cuda.is_available()
-            except ImportError:
-                parameters["amp"] = False
+        if parameters.get("device") != "cuda:0":
+            raise TabICLv2FineTuningError("GPU-only TabICLv2 fine-tuning requires device='cuda:0'")
+        if parameters.get("amp") is not True:
+            raise TabICLv2FineTuningError("GPU-only TabICLv2 fine-tuning requires amp=True")
         parameters["checkpoint_version"] = self._model_config["checkpoint_version"]
         return parameters
 

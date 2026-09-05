@@ -6,7 +6,7 @@ model:
     learning_rate: 0.00001
     weight_decay: 0.01
     grad_clip: 1.0
-    amp: auto
+    amp: true
     use_lr_scheduler: true
     warmup_proportion: 0.1
     n_estimators_finetune: 2
@@ -20,6 +20,6 @@ model:
     time_limit: null
     save_interval: 0
     eval_metric: roc_auc
-    device: auto
+    device: cuda:0
     random_state: 42
     verbose: false

@@ -56,6 +56,7 @@ def load_config(path: str | Path, *, _validate: bool = True) -> dict[str, Any]:
 def validate_config(config: Mapping[str, Any]) -> None:
     for section in (
         "project",
+        "runtime",
         "data",
         "aggregation",
         "experiment",
@@ -74,6 +75,20 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigError("Only tabiclv2_ft is supported; the standalone tabiclv2 ICL path was retired")
     if config["evaluation"].get("test_predictions", False):
         raise ConfigError("TabICLv2-FT test predictions require a separate frozen finalization workflow")
+    runtime = config["runtime"]
+    if not isinstance(runtime, Mapping):
+        raise ConfigError("runtime must be a mapping")
+    if runtime.get("require_cuda") is not True:
+        raise ConfigError("GPU-only runs require runtime.require_cuda to be true")
+    if runtime.get("device") != "cuda:0":
+        raise ConfigError("GPU-only runs require runtime.device to be 'cuda:0'")
+    parameters = config["model"].get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ConfigError("model.parameters must be a mapping")
+    if parameters.get("device") != runtime["device"]:
+        raise ConfigError("model.parameters.device must match runtime.device")
+    if parameters.get("amp") is not True:
+        raise ConfigError("GPU-only runs require model.parameters.amp to be true")
     fine_tuning = config["evaluation"].get("fine_tuning")
     if not isinstance(fine_tuning, Mapping):
         raise ConfigError("TabICLv2-FT requires evaluation.fine_tuning settings")
