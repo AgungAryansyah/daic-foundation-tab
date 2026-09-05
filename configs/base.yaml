@@ -1,0 +1,73 @@
+project:
+  seed: 42
+  output_root: outputs
+  cache_root: cache
+
+data:
+  root: data
+  labels:
+    train: original_labels/train_split_Depression_AVEC2017.csv
+    dev: original_labels/dev_split_Depression_AVEC2017.csv
+    test: original_labels/test_split_Depression_AVEC2017.csv
+  expected_counts:
+    train: 107
+    dev: 35
+    test: 47
+  missing_modality_policy: error
+  max_exclusion_fraction: 0.05
+  source_groups:
+    covarep:
+      modality: audio
+      parser: covarep
+      pattern: data/{participant_id}_COVAREP.csv
+    action_units:
+      modality: visual
+      parser: openface
+      pattern: data/{participant_id}_CLNF_AUs.txt
+    gaze:
+      modality: visual
+      parser: openface
+      pattern: data/{participant_id}_CLNF_gaze.txt
+    head_pose:
+      modality: visual
+      parser: openface
+      pattern: data/{participant_id}_CLNF_pose.txt
+
+modalities:
+  audio:
+    enabled: true
+    groups: [covarep]
+  visual:
+    enabled: true
+    groups: [action_units, gaze, head_pose]
+  text_numeric:
+    enabled: false
+    groups: []
+
+aggregation:
+  statistics: [mean, std]
+  std_ddof: 0
+  drop_all_nan: true
+  drop_constant: true
+
+experiment:
+  task: classification
+  feature_set: audio_visual
+
+evaluation:
+  threshold: 0.5
+  test_predictions: false
+  repeated_holdout:
+    enabled: true
+    repeats: 30
+    validation_fraction: 0.2
+    seed_start: 0
+
+bootstrap:
+  enabled: true
+  iterations: 2000
+  confidence: 0.95
+  random_state: 42
+
+logging:
+  level: INFO
