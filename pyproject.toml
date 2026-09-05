@@ -17,6 +17,7 @@ dependencies = [
     "scipy>=1.13",
     "tabicl[finetune]",
     "torch>=2.2",
+    "wandb>=0.29",
 ]
 
 [project.scripts]

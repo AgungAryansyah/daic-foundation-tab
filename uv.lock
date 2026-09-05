@@ -209,6 +209,7 @@ dependencies = [
     { name = "tabicl", extra = ["finetune"] },
     { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "wandb" },
 ]
 
 [package.dev-dependencies]
@@ -228,6 +229,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.13" },
     { name = "tabicl", extras = ["finetune"] },
     { name = "torch", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "wandb", specifier = ">=0.29" },
 ]
 
 [package.metadata.requires-dev]
