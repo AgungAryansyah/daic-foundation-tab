@@ -43,7 +43,7 @@ def bootstrap_metrics(
             "estimate": float(classification_metrics(y_true, y_pred, y_prob)[column]),
             "ci_lower": float(values.quantile(alpha)) if not values.empty else None,
             "ci_upper": float(values.quantile(1 - alpha)) if not values.empty else None,
-            "valid_bootstrap_samples": int(len(values)),
-            "invalid_bootstrap_samples": int(len(distribution) - len(values)),
+            "valid_bootstrap_samples": len(values),
+            "invalid_bootstrap_samples": len(distribution) - len(values),
         }
     return distribution, summary

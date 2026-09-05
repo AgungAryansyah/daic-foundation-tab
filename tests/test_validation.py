@@ -3,9 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from daic_foundation_tab.data.dataset import ParticipantDataset
+from daic_foundation_tab.data.dataset import DatasetError, ParticipantDataset
 from daic_foundation_tab.data.validation import prepare_splits, validate_dataset
-from daic_foundation_tab.data.dataset import DatasetError
 
 
 def _dataset(feature_name: str) -> ParticipantDataset:

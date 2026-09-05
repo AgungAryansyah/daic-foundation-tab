@@ -7,7 +7,7 @@ from daic_foundation_tab.evaluation.repeated_holdout import repeated_holdout
 
 
 class FakeClassifier:
-    def fit(self, features: pd.DataFrame, target: pd.Series) -> "FakeClassifier":
+    def fit(self, features: pd.DataFrame, target: pd.Series) -> FakeClassifier:
         return self
 
     def predict(self, features: pd.DataFrame) -> np.ndarray:

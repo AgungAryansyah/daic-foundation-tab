@@ -43,7 +43,7 @@ def classification_metrics(
     y_pred = np.asarray(prediction, dtype=int)
     y_prob = np.asarray(probability_positive, dtype=float)
     matrix = confusion_matrix(y_true, y_pred, labels=[0, 1])
-    true_negative, false_positive, false_negative, true_positive = matrix.ravel()
+    true_negative, false_positive, _, _ = matrix.ravel()
     has_both_classes = len(np.unique(y_true)) == 2
     calibration: dict[str, list[float]] = {"observed": [], "predicted": []}
     if has_both_classes:

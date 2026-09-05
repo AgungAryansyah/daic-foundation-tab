@@ -31,7 +31,7 @@ class TabICLv2Model:
         if not features.columns.is_unique:
             raise TabICLv2Error("TabICLv2 input feature columns must be unique")
 
-    def fit(self, features: pd.DataFrame, target: pd.Series) -> "TabICLv2Model":
+    def fit(self, features: pd.DataFrame, target: pd.Series) -> TabICLv2Model:
         self.validate_input(features)
         if target.nunique() != 2:
             raise TabICLv2Error("TabICLv2 classification context must contain both classes")
