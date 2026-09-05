@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ from daic_foundation_tab.tracking.runtime import (
     reset_cuda_peak_memory,
     timed_call,
 )
+from daic_foundation_tab.tracking.seeds import set_global_seed
 
 
 def _positive_probability(model: TabularClassifier, features: pd.DataFrame) -> np.ndarray:
@@ -106,8 +108,11 @@ def _summary(
 
 
 def run_experiment(config: dict[str, Any]) -> Path:
+    started_at = datetime.now(UTC)
     started = time.perf_counter()
-    dataset = build_or_load_dataset(config)
+    seed = int(config["project"]["seed"])
+    set_global_seed(seed)
+    dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
     feature_set = config["experiment"]["feature_set"]
     validation = validate_dataset(
         dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
@@ -121,11 +126,26 @@ def run_experiment(config: dict[str, Any]) -> Path:
     )
     logger = configure_run_logger(artifacts.path / "run.log", config["logging"]["level"])
     logger.info("run_id=%s", artifacts.path.name)
+    logger.info("config_path=%s", config["_config_path"])
+    logger.info("dataset_root=%s", config["data"]["root"])
     logger.info("feature_set=%s", feature_set)
+    logger.info("seed=%s", seed)
     logger.info("participants train=%s dev=%s test=%s", *(validation["split_statistics"][split]["participants"] for split in ("train", "dev", "test")))
     logger.info("feature_count=%s", len(prepared.selection.columns))
     write_config(config, artifacts.path / "config_resolved.yaml")
-    artifacts.json("environment.json", {**environment_metadata(), "git_commit": _git_commit()})
+    artifacts.json(
+        "environment.json",
+        {
+            **environment_metadata(),
+            "git_commit": _git_commit(),
+            "random_seeds": {
+                "project": seed,
+                "tabicl": config["model"]["parameters"].get("random_state"),
+                "bootstrap": config["bootstrap"].get("random_state"),
+                "repeated_holdout_start": config["evaluation"]["repeated_holdout"].get("seed_start"),
+            },
+        },
+    )
     artifacts.json("dataset_summary.json", validation["split_statistics"])
     artifacts.json("dataset_inventory.json", dataset.inventory)
     artifacts.json("validation_report.json", validation)
@@ -212,9 +232,13 @@ def run_experiment(config: dict[str, Any]) -> Path:
             classification_predictions(test_ids, "test", test_prediction, test_probability),
         )
 
+    ended_at = datetime.now(UTC)
     runtime = {
         "device": device,
         **cuda_peak_memory(),
+        "started_at": started_at.isoformat(),
+        "ended_at": ended_at.isoformat(),
+        "feature_build_seconds": feature_build_seconds,
         "fit_seconds": fit_seconds,
         "predict_seconds": predict_seconds + probability_seconds,
         "total_seconds": time.perf_counter() - started,
