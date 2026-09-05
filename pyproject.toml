@@ -34,6 +34,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "real_model: requires a locally available TabICL checkpoint",
+]
 
 [tool.ruff]
 line-length = 100
