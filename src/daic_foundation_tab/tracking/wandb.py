@@ -321,6 +321,12 @@ class WandbTracker:
         self.results["development"] = development
         self._log("development", development)
 
+    def record_test(self, metrics: Mapping[str, Any]) -> None:
+        scalar_metrics = _scalar_values("", metrics)
+        test = {key.removeprefix("/"): value for key, value in scalar_metrics.items()}
+        self.results["test"] = test
+        self._log("test", test)
+
     def record_bootstrap(self, summary: Mapping[str, Any]) -> None:
         self.results["bootstrap"] = _json_value(summary)
         self._log("bootstrap", summary)

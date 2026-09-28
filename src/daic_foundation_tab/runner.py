@@ -12,6 +12,7 @@ import pandas as pd
 
 from daic_foundation_tab.config import write_config
 from daic_foundation_tab.data import build_or_load_dataset
+from daic_foundation_tab.data.labels import load_test_ground_truth
 from daic_foundation_tab.data.validation import validate_dataset
 from daic_foundation_tab.evaluation.bootstrap import bootstrap_metrics
 from daic_foundation_tab.evaluation.fine_tuning import (
@@ -56,6 +57,7 @@ def _summary(
     model_metadata: dict[str, Any],
     validation: dict[str, Any],
     metrics: dict[str, Any],
+    test_metrics: dict[str, Any] | None,
     bootstrap_summary: dict[str, Any] | None,
     repeated_summary: dict[str, Any] | None,
     runtime: dict[str, Any],
@@ -91,6 +93,18 @@ def _summary(
     ]
     if bootstrap_summary is not None:
         lines.extend(["", "## Bootstrap", f"Macro F1 CI: {bootstrap_summary['macro_f1']}"])
+    if test_metrics is not None:
+        lines.extend(
+            [
+                "",
+                "## Test Result",
+                f"Macro F1: {test_metrics['macro_f1']:.4f}",
+                f"Depressed F1: {test_metrics['depressed_f1']:.4f}",
+                f"Balanced Accuracy: {test_metrics['balanced_accuracy']:.4f}",
+                f"ROC-AUC: {test_metrics['roc_auc']:.4f}",
+                f"PR-AUC: {test_metrics['pr_auc']:.4f}",
+            ]
+        )
     if repeated_summary is not None:
         lines.extend(["", "## Repeated Holdout", f"Macro F1: {repeated_summary['macro_f1']}"])
     return "\n".join(lines) + "\n"
@@ -200,6 +214,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
             pd.DataFrame([{key: value for key, value in metrics.items() if isinstance(value, float)}]),
         )
 
+        test_metrics = None
         if config["evaluation"].get("test_predictions", False):
             logger.info("generating official test predictions")
             test_prediction, test_predict_seconds = timed_call(model.predict, prepared.test_x)
@@ -207,8 +222,28 @@ def run_experiment(config: dict[str, Any]) -> Path:
                 _positive_probability, model, prepared.test_x
             )
             test_ids = dataset.table.loc[dataset.table["split"] == "test", "participant_id"]
+            ground_truth_path = config["data"].get("test_ground_truth")
+            test_target = None
+            if ground_truth_path:
+                label_path = Path(config["data"]["root"]).expanduser().resolve() / ground_truth_path
+                if label_path.is_file():
+                    test_target = load_test_ground_truth(label_path, test_ids)
+                    test_metrics = classification_metrics(test_target, test_prediction, test_probability)
+                    artifacts.json("metrics_test.json", test_metrics)
+                    artifacts.csv(
+                        "metrics_test.csv",
+                        pd.DataFrame([{key: value for key, value in test_metrics.items() if isinstance(value, float)}]),
+                    )
+                    tracker.record_test(test_metrics)
+                    logger.info(
+                        "test macro_f1=%s balanced_accuracy=%s",
+                        test_metrics["macro_f1"],
+                        test_metrics["balanced_accuracy"],
+                    )
+                else:
+                    logger.warning("test ground truth unavailable at %s; skipping test metrics", label_path)
             test_predictions = classification_predictions(
-                test_ids, "test", test_prediction, test_probability
+                test_ids, "test", test_prediction, test_probability, test_target
             )
             artifacts.csv("predictions_test.csv", test_predictions)
             predict_seconds += test_predict_seconds
@@ -269,7 +304,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
         artifacts.json("model.json", model_metadata)
         artifacts.text(
             "summary.md",
-            _summary(model_metadata, validation, metrics, bootstrap_summary, repeated_summary, runtime),
+            _summary(model_metadata, validation, metrics, test_metrics, bootstrap_summary, repeated_summary, runtime),
         )
         tracker.complete(model_metadata, environment, runtime)
         return artifacts.path

@@ -13,6 +13,7 @@ data:
     train: original_labels/train_split_Depression_AVEC2017.csv
     dev: original_labels/dev_split_Depression_AVEC2017.csv
     test: original_labels/test_split_Depression_AVEC2017.csv
+  test_ground_truth: original_labels/full_test_split.csv
   expected_counts:
     train: 107
     dev: 35

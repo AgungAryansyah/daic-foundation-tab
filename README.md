@@ -6,7 +6,7 @@ DAIC-WOZ is licensed sensitive data and is not included in this repository. Keep
 
 ## Remote environment
 
-Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.5.1 with CUDA 12.1, and an NVIDIA driver compatible with CUDA 12.2 or later. CPU fine-tuning is intentionally unsupported.
+Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.5.1 with CUDA 11.8, and an NVIDIA driver version 450.80.02 or later for CUDA 11.x minor-version compatibility. CPU fine-tuning is intentionally unsupported.
 
 ```bash
 nvidia-smi
@@ -92,19 +92,45 @@ uv run --python 3.12 python -m daic_foundation_tab.cli compare \
   outputs/<run-a> outputs/<run-b> outputs/<run-c>
 ```
 
+## E-DAIC CSV preparation
+
+For the E-DAIC file-index download, keep the extracted `labels/` directory and participant `data/<id>_P/features/` directories together. Prepare the OpenSMILE eGeMAPS and OpenFace 2.1 CSVs for the E-DAIC experiment:
+
+```bash
+uv run --python 3.12 python -m daic_foundation_tab.data.prepare_edaic \
+  --source /path/to/edaic \
+  --output data/edaic
+
+uv run --python 3.12 python -m daic_foundation_tab.cli inspect \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli build-features \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli validate \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+```
+
+Preparation checks all 275 participant IDs and both selected feature files before writing the flat dataset. It hard-links files when possible and copies across filesystems. Progress and failures are recorded in `data/edaic/preparation_status.json`.
+
+The supplied E-DAIC binary labels disagree with the project's `PHQ8_Score >= 10` target for some participants. Preparation writes score-only labels, so train, development, and test evaluation derive the target consistently. The status file records disagreement counts by split. The original E-DAIC labels remain in the downloaded source directory.
+
 ## Evaluation protocol
 
 Each participant is represented by one row after temporal mean/std pooling. Frame metadata, participant identifiers, PHQ-8 scores/items, supplied labels, and prediction targets are excluded from the feature matrix. The binary target is derived from `PHQ8_Score >= 10`; supplied binary labels are retained only for auditing.
 
 For each run, the official training split is stratified into an 80% fine-tuning partition and 20% early-stopping validation partition. Feature filtering is fit only on the fine-tuning partition. The official development split is reserved for evaluation and never participates in feature selection, fine-tuning, or checkpoint selection. Repeated internal holdouts use nested train-only early-stopping partitions.
 
-The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. After fine-tuning, every run saves official test predictions and class probabilities to `predictions_test.csv` using the selected checkpoint. The official test split has no labels, so no test metrics are computed.
+The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. After fine-tuning, every run saves official test predictions and class probabilities to `predictions_test.csv` using the selected checkpoint. The DAIC-WOZ test split CSV has no labels; when `data/original_labels/full_test_split.csv` is available, its PHQ scores are matched by participant ID only after prediction to calculate `metrics_test.json` and `metrics_test.csv`. The prepared E-DAIC test split contains PHQ scores, which are used only after prediction. Set `data.test_ground_truth` to null to save predictions without test metrics.
 
 ## Research records
 
-Each local result directory contains resolved settings, environment metadata, data-validation reports, feature and split provenance, the best checkpoint, development predictions and metrics, official test predictions and probabilities, uncertainty results, runtime metadata, and a summary.
+Each local result directory contains resolved settings, environment metadata, data-validation reports, feature and split provenance, the best checkpoint, development predictions and metrics, official test predictions and probabilities, test metrics when labels are available, uncertainty results, runtime metadata, and a summary.
 
-W&B charts TabICLv2's real per-epoch mean training loss and validation metrics, then records model-selection metadata, development metrics, bootstrap summaries, repeated-holdout metric rows, and runtime metadata. The immutable `research-record` artifact retains the sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, and fine-tuning history. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
+W&B charts TabICLv2's real per-epoch mean training loss and validation metrics, then records model-selection metadata, development and test metrics, bootstrap summaries, repeated-holdout metric rows, and runtime metadata. The immutable `research-record` artifact retains the sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, and fine-tuning history. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
 
 ## Research use
 
