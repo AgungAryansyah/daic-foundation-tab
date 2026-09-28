@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -94,6 +95,7 @@ def bootstrap_regression_metrics(
     iterations: int,
     confidence: float,
     random_state: int,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     y_true = np.asarray(target, dtype=float)
     y_pred = np.asarray(prediction, dtype=float)
@@ -113,6 +115,11 @@ def bootstrap_regression_metrics(
                 **{key: value for key, value in metrics.items() if isinstance(value, float)},
             }
         )
+        completed = iteration + 1
+        if progress_callback is not None and (
+            completed == iterations or completed % max(1, iterations // 20) == 0
+        ):
+            progress_callback(completed, iterations)
     distribution = pd.DataFrame(rows)
     alpha = (1 - confidence) / 2
     summary = {}

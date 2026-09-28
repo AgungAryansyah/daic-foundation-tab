@@ -118,6 +118,10 @@ def _model_for_seed(model_config: dict[str, Any], random_state: int) -> FineTuna
 
 
 def run_experiment(config: dict[str, Any]) -> Path:
+    if config["experiment"]["task"] == "regression":
+        from daic_foundation_tab.regression_runner import run_regression_experiment
+
+        return run_regression_experiment(config)
     device = require_cuda_device(config["runtime"]["device"])
     started_at = datetime.now(UTC)
     started = time.perf_counter()
