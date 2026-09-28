@@ -25,13 +25,11 @@ def test_rejects_retired_icl_model_name() -> None:
         validate_config(config)
 
 
-def test_rejects_fine_tuned_test_predictions() -> None:
+def test_all_experiments_enable_test_predictions() -> None:
     project_root = Path(__file__).parents[1]
-    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
-    config["evaluation"]["test_predictions"] = True
-
-    with pytest.raises(ConfigError, match="finalization"):
-        validate_config(config)
+    for path in (project_root / "configs/experiments").glob("*.yaml"):
+        config = load_config(path)
+        assert config["evaluation"]["test_predictions"] is True, path.name
 
 
 def test_rejects_cpu_runtime() -> None:

@@ -60,7 +60,7 @@ experiment:
 
 evaluation:
   threshold: 0.5
-  test_predictions: false
+  test_predictions: true
   fine_tuning:
     validation_fraction: 0.2
     validation_seed: 42

@@ -200,6 +200,21 @@ def run_experiment(config: dict[str, Any]) -> Path:
             pd.DataFrame([{key: value for key, value in metrics.items() if isinstance(value, float)}]),
         )
 
+        if config["evaluation"].get("test_predictions", False):
+            logger.info("generating official test predictions")
+            test_prediction, test_predict_seconds = timed_call(model.predict, prepared.test_x)
+            test_probability, test_probability_seconds = timed_call(
+                _positive_probability, model, prepared.test_x
+            )
+            test_ids = dataset.table.loc[dataset.table["split"] == "test", "participant_id"]
+            test_predictions = classification_predictions(
+                test_ids, "test", test_prediction, test_probability
+            )
+            artifacts.csv("predictions_test.csv", test_predictions)
+            predict_seconds += test_predict_seconds
+            probability_seconds += test_probability_seconds
+            logger.info("saved official test predictions for %s participants", len(test_predictions))
+
         bootstrap_summary = None
         if config["bootstrap"].get("enabled", False):
             bootstrap_distribution, bootstrap_summary = bootstrap_metrics(

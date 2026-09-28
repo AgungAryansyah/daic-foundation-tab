@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from daic_foundation_tab import runner
@@ -100,6 +101,7 @@ def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     _FakeTracker.instances.clear()
     config = write_synthetic_dataset(tmp_path / "data")
     config["_config_path"] = "synthetic.yaml"
+    config["evaluation"]["test_predictions"] = True
     _mock_gpu_runtime(monkeypatch)
     monkeypatch.setattr(runner, "WandbTracker", _FakeTracker)
     monkeypatch.setattr(runner, "_model_for_seed", lambda *_: _FakeModel())
@@ -117,6 +119,14 @@ def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     ]
     assert (output / "finetune_metadata.json").is_file()
     assert (output / "predictions_dev.csv").is_file()
+    test_predictions = pd.read_csv(output / "predictions_test.csv")
+    assert test_predictions["participant_id"].tolist() == [500, 501]
+    assert test_predictions["split"].tolist() == ["test", "test"]
+    assert test_predictions["y_true"].isna().all()
+    assert test_predictions["y_pred"].tolist() == [0, 0]
+    assert test_predictions["prob_non_depressed"].tolist() == [0.7, 0.7]
+    assert test_predictions["prob_depressed"].tolist() == [0.3, 0.3]
+    assert not (output / "metrics_test.json").exists()
 
 
 def test_runner_marks_wandb_failed_when_fine_tuning_errors(monkeypatch, tmp_path) -> None:
