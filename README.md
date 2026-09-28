@@ -124,11 +124,20 @@ uv run --python 3.12 python -m daic_foundation_tab.cli run \
   --config configs/experiments/tabiclv2_ft_edaic_audio_visual_smoke.yaml
 ```
 
-Then run the full E-DAIC audio-visual experiment:
+Then run the full E-DAIC experiments. Each command trains a separate model using the selected modality:
 
 ```bash
+# Audio and visual
 uv run --python 3.12 python -m daic_foundation_tab.cli run \
   --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+# Audio only
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
+  --config configs/experiments/tabiclv2_ft_edaic_audio.yaml
+
+# Visual only
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
+  --config configs/experiments/tabiclv2_ft_edaic_visual.yaml
 ```
 
 The full configuration allows up to 50 training epochs, then runs 30 repeated holdouts and 2,000 bootstrap iterations. Each run writes its checkpoint, predictions, metrics, and summary under `outputs/`.
