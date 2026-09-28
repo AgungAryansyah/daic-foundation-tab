@@ -34,6 +34,7 @@ from daic_foundation_tab.tracking.runtime import (
     timed_call,
 )
 from daic_foundation_tab.tracking.seeds import set_global_seed
+from daic_foundation_tab.tracking.test_evaluations import collect_test_evaluations
 from daic_foundation_tab.tracking.wandb import WandbTracker
 
 
@@ -234,6 +235,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
                         "metrics_test.csv",
                         pd.DataFrame([{key: value for key, value in test_metrics.items() if isinstance(value, float)}]),
                     )
+                    collect_test_evaluations(artifacts.path.parent)
                     tracker.record_test(test_metrics)
                     logger.info(
                         "test macro_f1=%s balanced_accuracy=%s",

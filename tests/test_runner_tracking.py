@@ -131,6 +131,7 @@ def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     assert test_predictions["prob_non_depressed"].tolist() == [0.7, 0.7]
     assert test_predictions["prob_depressed"].tolist() == [0.3, 0.3]
     assert not (output / "metrics_test.json").exists()
+    assert not (output.parent / "test_evaluations.csv").exists()
 
 
 def test_runner_scores_test_after_training_when_ground_truth_is_configured(
@@ -158,6 +159,10 @@ def test_runner_scores_test_after_training_when_ground_truth_is_configured(
     assert predictions["y_true"].tolist() == [0, 1]
     assert (output / "metrics_test.json").is_file()
     assert (output / "metrics_test.csv").is_file()
+    comparison = pd.read_csv(output.parent / "test_evaluations.csv")
+    assert comparison["run"].tolist() == [output.name]
+    assert comparison["feature_set"].tolist() == ["audio_visual"]
+    assert comparison.loc[0, "macro_f1"] == pd.read_csv(output / "metrics_test.csv").loc[0, "macro_f1"]
     assert "## Test Result" in (output / "summary.md").read_text()
     assert [call[0] for call in _FakeTracker.instances[0].calls] == [
         "start",

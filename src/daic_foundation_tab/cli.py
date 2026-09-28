@@ -13,6 +13,7 @@ from daic_foundation_tab.data.discovery import discover_sources
 from daic_foundation_tab.data.labels import load_official_labels
 from daic_foundation_tab.data.validation import validate_dataset
 from daic_foundation_tab.runner import run_experiment
+from daic_foundation_tab.tracking.test_evaluations import collect_test_evaluations
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -24,6 +25,8 @@ def _parser() -> argparse.ArgumentParser:
     compare = subparsers.add_parser("compare")
     compare.add_argument("runs", type=Path, nargs="+")
     compare.add_argument("--output", type=Path)
+    collect = subparsers.add_parser("collect-test-results")
+    collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     return parser
 
 
@@ -106,6 +109,9 @@ def main() -> None:
     args = _parser().parse_args()
     if args.command == "compare":
         _compare(args.runs, args.output)
+        return
+    if args.command == "collect-test-results":
+        print(collect_test_evaluations(args.output_root))
         return
     config = load_config(args.config)
     if args.command == "inspect":
