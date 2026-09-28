@@ -1,0 +1,7 @@
+extends:
+  - tabiclv2_ft_audio_visual_complete_cohort.yaml
+  - ../models/tabiclv2_ft_regressor.yaml
+
+experiment:
+  name: tabiclv2_ft_regression_audio_visual_complete_cohort_mean_std
+  task: regression

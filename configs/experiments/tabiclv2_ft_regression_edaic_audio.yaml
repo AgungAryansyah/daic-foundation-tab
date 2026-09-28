@@ -1,0 +1,7 @@
+extends:
+  - tabiclv2_ft_edaic_audio.yaml
+  - ../models/tabiclv2_ft_regressor.yaml
+
+experiment:
+  name: tabiclv2_ft_regression_edaic_audio_mean_std
+  task: regression

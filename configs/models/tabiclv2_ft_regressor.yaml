@@ -1,0 +1,5 @@
+model:
+  name: tabiclv2_ft_regressor
+  checkpoint_version: tabicl-regressor-v2-20260212.ckpt
+  parameters:
+    eval_metric: mae

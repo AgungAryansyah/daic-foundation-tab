@@ -80,6 +80,36 @@ def test_regression_config_requires_regressor_and_mae() -> None:
         validate_config(config)
 
 
+@pytest.mark.parametrize("dataset", ["", "edaic_"])
+@pytest.mark.parametrize("modality", ["audio", "visual", "audio_visual"])
+def test_regression_presets_cover_each_dataset_and_modality(dataset, modality) -> None:
+    root = Path(__file__).parents[1] / "configs/experiments"
+    suffix = "" if dataset else "_complete_cohort"
+    config = load_config(
+        root / f"tabiclv2_ft_regression_{dataset}{modality}{suffix}.yaml"
+    )
+
+    assert config["experiment"]["task"] == "regression"
+    assert config["experiment"]["feature_set"] == modality
+    assert config["model"]["name"] == "tabiclv2_ft_regressor"
+    assert config["model"]["checkpoint_version"] == "tabicl-regressor-v2-20260212.ckpt"
+    assert config["model"]["parameters"]["eval_metric"] == "mae"
+    assert config["evaluation"]["test_predictions"] is True
+
+
+@pytest.mark.parametrize("dataset", ["", "edaic_"])
+def test_regression_smoke_presets_skip_repeated_evaluation(dataset) -> None:
+    root = Path(__file__).parents[1] / "configs/experiments"
+    suffix = "" if dataset else "_complete_cohort"
+    config = load_config(
+        root / f"tabiclv2_ft_regression_{dataset}audio_visual{suffix}_smoke.yaml"
+    )
+
+    assert config["model"]["parameters"]["epochs"] == 1
+    assert config["evaluation"]["repeated_holdout"]["enabled"] is False
+    assert config["bootstrap"]["enabled"] is False
+
+
 def test_rejects_invalid_wandb_mode() -> None:
     project_root = Path(__file__).parents[1]
     config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
