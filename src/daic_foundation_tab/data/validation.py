@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from .dataset import DatasetError, ParticipantDataset
@@ -133,6 +134,27 @@ def validate_dataset(
         "exclusions": exclusion_report,
         "warnings": exclusion_warnings,
     }
+
+
+def validate_regression_dataset(dataset: ParticipantDataset, feature_set: str) -> dict[str, Any]:
+    report = validate_dataset(dataset, feature_set)
+    for split in ("train", "dev"):
+        scores = pd.to_numeric(
+            dataset.table.loc[dataset.table["split"] == split, "target_phq8"], errors="coerce"
+        )
+        if scores.empty or not np.isfinite(scores.to_numpy(dtype=float)).all():
+            raise DatasetError(f"{split} PHQ-8 scores must be present and finite")
+        if not scores.between(0, 24).all():
+            raise DatasetError(f"{split} PHQ-8 scores must be between 0 and 24")
+        report["split_statistics"][split]["phq8_score"] = {
+            "min": float(scores.min()),
+            "max": float(scores.max()),
+            "mean": float(scores.mean()),
+        }
+    test_scores = dataset.table.loc[dataset.table["split"] == "test", "target_phq8"]
+    if test_scores.notna().any():
+        raise DatasetError("Test PHQ-8 scores must remain hidden until evaluation")
+    return report
 
 
 def prepare_splits(dataset: ParticipantDataset, feature_set: str) -> PreparedSplits:

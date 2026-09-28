@@ -72,7 +72,12 @@ def _read_split(path: Path, split: str) -> tuple[pd.DataFrame, int]:
     return result, mismatches
 
 
-def load_test_ground_truth(path: Path, participant_ids: pd.Series) -> pd.Series:
+def load_test_ground_truth(
+    path: Path, participant_ids: pd.Series, *, target: str = "binary_depression"
+) -> pd.Series:
+    target_column = {"binary_depression": "target_binary", "phq8": "target_phq8"}.get(target)
+    if target_column is None:
+        raise LabelError(f"Unsupported target: {target}")
     labels, mismatches = _read_split(path, "ground_truth")
     if mismatches:
         raise LabelError(f"Binary labels disagree with PHQ scores in {path}: {mismatches} rows")
@@ -84,7 +89,8 @@ def load_test_ground_truth(path: Path, participant_ids: pd.Series) -> pd.Series:
     missing = ids[~ids.isin(indexed.index)].tolist()
     if missing:
         raise LabelError(f"Missing test ground truth for participant IDs: {missing}")
-    return indexed.loc[ids, "target_binary"].astype(int).reset_index(drop=True)
+    dtype = int if target == "binary_depression" else float
+    return indexed.loc[ids, target_column].astype(dtype).reset_index(drop=True)
 
 
 def load_official_labels(data_config: dict[str, Any]) -> LabelLoadResult:

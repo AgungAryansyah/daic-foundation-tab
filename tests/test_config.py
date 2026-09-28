@@ -59,6 +59,27 @@ def test_rejects_invalid_decision_threshold() -> None:
         validate_config(config)
 
 
+def test_regression_config_requires_regressor_and_mae() -> None:
+    project_root = Path(__file__).parents[1]
+    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
+    config["experiment"]["task"] = "regression"
+
+    with pytest.raises(ConfigError, match="tabiclv2_ft_regressor"):
+        validate_config(config)
+
+    config["model"]["name"] = "tabiclv2_ft_regressor"
+    with pytest.raises(ConfigError, match="eval_metric"):
+        validate_config(config)
+
+    config["model"]["parameters"]["eval_metric"] = "mae"
+    config["evaluation"].pop("threshold")
+    validate_config(config)
+
+    config["experiment"]["task"] = "classification"
+    with pytest.raises(ConfigError, match="tabiclv2_ft"):
+        validate_config(config)
+
+
 def test_rejects_invalid_wandb_mode() -> None:
     project_root = Path(__file__).parents[1]
     config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")

@@ -67,12 +67,17 @@ def validate_config(config: Mapping[str, Any]) -> None:
         if section not in config:
             raise ConfigError(f"Missing required configuration section: {section}")
 
-    if config["experiment"].get("task") != "classification":
-        raise ConfigError("Phase 1 supports classification only")
+    task = config["experiment"].get("task")
+    if task not in {"classification", "regression"}:
+        raise ConfigError("experiment.task must be classification or regression")
     if config["experiment"].get("feature_set") not in {"audio", "visual", "audio_visual"}:
         raise ConfigError("Phase 1 feature_set must be audio, visual, or audio_visual")
-    if config["model"].get("name") != "tabiclv2_ft":
+    model_name = config["model"].get("name")
+    if model_name == "tabiclv2":
         raise ConfigError("Only tabiclv2_ft is supported; the standalone tabiclv2 ICL path was retired")
+    expected_model = "tabiclv2_ft" if task == "classification" else "tabiclv2_ft_regressor"
+    if model_name != expected_model:
+        raise ConfigError(f"{task} requires model.name to be {expected_model}")
     runtime = config["runtime"]
     if not isinstance(runtime, Mapping):
         raise ConfigError("runtime must be a mapping")
@@ -87,13 +92,16 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigError("model.parameters.device must match runtime.device")
     if parameters.get("amp") is not True:
         raise ConfigError("GPU-only runs require model.parameters.amp to be true")
-    threshold = config["evaluation"].get("threshold")
-    if (
-        isinstance(threshold, bool)
-        or not isinstance(threshold, (int, float))
-        or not 0 <= threshold <= 1
-    ):
-        raise ConfigError("evaluation.threshold must be between zero and one")
+    if task == "classification":
+        threshold = config["evaluation"].get("threshold")
+        if (
+            isinstance(threshold, bool)
+            or not isinstance(threshold, (int, float))
+            or not 0 <= threshold <= 1
+        ):
+            raise ConfigError("evaluation.threshold must be between zero and one")
+    elif config["model"]["parameters"].get("eval_metric") != "mae":
+        raise ConfigError("Regression fine-tuning requires model.parameters.eval_metric to be mae")
     fine_tuning = config["evaluation"].get("fine_tuning")
     if not isinstance(fine_tuning, Mapping):
         raise ConfigError("TabICLv2-FT requires evaluation.fine_tuning settings")

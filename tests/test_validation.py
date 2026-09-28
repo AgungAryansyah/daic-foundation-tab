@@ -4,7 +4,11 @@ import pandas as pd
 import pytest
 
 from daic_foundation_tab.data.dataset import DatasetError, ParticipantDataset
-from daic_foundation_tab.data.validation import prepare_splits, validate_dataset
+from daic_foundation_tab.data.validation import (
+    prepare_splits,
+    validate_dataset,
+    validate_regression_dataset,
+)
 
 
 def _dataset(feature_name: str) -> ParticipantDataset:
@@ -46,3 +50,19 @@ def test_feature_filtering_uses_train_rows_only() -> None:
 
     assert prepared.selection.dropped_constant == ["covarep_F0_mean"]
     assert prepared.dev_x.empty
+
+
+def test_regression_validation_reports_scores_without_test_labels() -> None:
+    report = validate_regression_dataset(_dataset("covarep_F0_mean"), "audio")
+
+    assert report["split_statistics"]["train"]["phq8_score"]["mean"] == 7.0
+    assert "phq8_score" not in report["split_statistics"]["test"]
+
+
+@pytest.mark.parametrize("split,score", [("train", float("nan")), ("dev", 25.0), ("test", 3.0)])
+def test_regression_validation_rejects_missing_invalid_or_visible_scores(split, score) -> None:
+    dataset = _dataset("covarep_F0_mean")
+    dataset.table.loc[dataset.table["split"] == split, "target_phq8"] = score
+
+    with pytest.raises(DatasetError, match="PHQ-8"):
+        validate_regression_dataset(dataset, "audio")
