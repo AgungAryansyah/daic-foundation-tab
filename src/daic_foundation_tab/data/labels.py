@@ -53,8 +53,8 @@ def _read_split(path: Path, split: str) -> tuple[pd.DataFrame, int]:
     if split == "test":
         return result, 0
 
-    score_column = _column_name(frame.columns.tolist(), {"phq8score"})
-    binary_column = _column_name(frame.columns.tolist(), {"phq8binary"})
+    score_column = _column_name(frame.columns.tolist(), {"phq8score", "phqscore"})
+    binary_column = _column_name(frame.columns.tolist(), {"phq8binary", "phqbinary"})
     if score_column is None:
         raise LabelError(f"No PHQ-8 score column in {path}")
 
@@ -70,6 +70,21 @@ def _read_split(path: Path, split: str) -> tuple[pd.DataFrame, int]:
         supplied = pd.to_numeric(frame[binary_column], errors="coerce")
         mismatches = int((supplied.notna() & (supplied.astype("Int64") != derived)).sum())
     return result, mismatches
+
+
+def load_test_ground_truth(path: Path, participant_ids: pd.Series) -> pd.Series:
+    labels, mismatches = _read_split(path, "ground_truth")
+    if mismatches:
+        raise LabelError(f"Binary labels disagree with PHQ scores in {path}: {mismatches} rows")
+    if labels["participant_id"].duplicated().any():
+        raise LabelError(f"Duplicate participant IDs in {path}")
+
+    ids = participant_ids.astype(str).reset_index(drop=True)
+    indexed = labels.set_index("participant_id")
+    missing = ids[~ids.isin(indexed.index)].tolist()
+    if missing:
+        raise LabelError(f"Missing test ground truth for participant IDs: {missing}")
+    return indexed.loc[ids, "target_binary"].astype(int).reset_index(drop=True)
 
 
 def load_official_labels(data_config: dict[str, Any]) -> LabelLoadResult:

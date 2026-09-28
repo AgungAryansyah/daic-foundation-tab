@@ -98,13 +98,13 @@ Each participant is represented by one row after temporal mean/std pooling. Fram
 
 For each run, the official training split is stratified into an 80% fine-tuning partition and 20% early-stopping validation partition. Feature filtering is fit only on the fine-tuning partition. The official development split is reserved for evaluation and never participates in feature selection, fine-tuning, or checkpoint selection. Repeated internal holdouts use nested train-only early-stopping partitions.
 
-The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. After fine-tuning, every run saves official test predictions and class probabilities to `predictions_test.csv` using the selected checkpoint. The official test split has no labels, so no test metrics are computed.
+The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. After fine-tuning, every run saves official test predictions and class probabilities to `predictions_test.csv` using the selected checkpoint. The official test split CSV has no labels; when `data/original_labels/full_test_split.csv` is available, its PHQ scores are matched by participant ID only after prediction to calculate `metrics_test.json` and `metrics_test.csv`. Set `data.test_ground_truth` to null to save predictions without test metrics.
 
 ## Research records
 
-Each local result directory contains resolved settings, environment metadata, data-validation reports, feature and split provenance, the best checkpoint, development predictions and metrics, official test predictions and probabilities, uncertainty results, runtime metadata, and a summary.
+Each local result directory contains resolved settings, environment metadata, data-validation reports, feature and split provenance, the best checkpoint, development predictions and metrics, official test predictions and probabilities, test metrics when labels are available, uncertainty results, runtime metadata, and a summary.
 
-W&B charts TabICLv2's real per-epoch mean training loss and validation metrics, then records model-selection metadata, development metrics, bootstrap summaries, repeated-holdout metric rows, and runtime metadata. The immutable `research-record` artifact retains the sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, and fine-tuning history. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
+W&B charts TabICLv2's real per-epoch mean training loss and validation metrics, then records model-selection metadata, development and test metrics, bootstrap summaries, repeated-holdout metric rows, and runtime metadata. The immutable `research-record` artifact retains the sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, and fine-tuning history. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
 
 ## Research use
 

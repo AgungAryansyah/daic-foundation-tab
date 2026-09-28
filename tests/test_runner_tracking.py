@@ -73,6 +73,9 @@ class _FakeTracker:
     def record_development(self, *args):
         self.calls.append(("development", args))
 
+    def record_test(self, *args):
+        self.calls.append(("test", args))
+
     def record_bootstrap(self, *args):
         self.calls.append(("bootstrap", args))
 
@@ -102,6 +105,7 @@ def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     config = write_synthetic_dataset(tmp_path / "data")
     config["_config_path"] = "synthetic.yaml"
     config["evaluation"]["test_predictions"] = True
+    config["data"]["test_ground_truth"] = "original_labels/missing.csv"
     _mock_gpu_runtime(monkeypatch)
     monkeypatch.setattr(runner, "WandbTracker", _FakeTracker)
     monkeypatch.setattr(runner, "_model_for_seed", lambda *_: _FakeModel())
@@ -127,6 +131,42 @@ def test_runner_records_fine_tuning_lifecycle(monkeypatch, tmp_path) -> None:
     assert test_predictions["prob_non_depressed"].tolist() == [0.7, 0.7]
     assert test_predictions["prob_depressed"].tolist() == [0.3, 0.3]
     assert not (output / "metrics_test.json").exists()
+
+
+def test_runner_scores_test_after_training_when_ground_truth_is_configured(
+    monkeypatch, tmp_path
+) -> None:
+    _FakeTracker.instances.clear()
+    config = write_synthetic_dataset(tmp_path / "data")
+    config["_config_path"] = "synthetic.yaml"
+    config["evaluation"]["test_predictions"] = True
+    config["data"]["test_ground_truth"] = "original_labels/full_test_split.csv"
+    pd.DataFrame(
+        {
+            "Participant_ID": [501, 500],
+            "PHQ_Binary": [1, 0],
+            "PHQ_Score": [12, 3],
+        }
+    ).to_csv(tmp_path / "data" / "original_labels" / "full_test_split.csv", index=False)
+    _mock_gpu_runtime(monkeypatch)
+    monkeypatch.setattr(runner, "WandbTracker", _FakeTracker)
+    monkeypatch.setattr(runner, "_model_for_seed", lambda *_: _FakeModel())
+
+    output = runner.run_experiment(config)
+
+    predictions = pd.read_csv(output / "predictions_test.csv")
+    assert predictions["y_true"].tolist() == [0, 1]
+    assert (output / "metrics_test.json").is_file()
+    assert (output / "metrics_test.csv").is_file()
+    assert "## Test Result" in (output / "summary.md").read_text()
+    assert [call[0] for call in _FakeTracker.instances[0].calls] == [
+        "start",
+        "fine_tuning_epoch",
+        "fine_tuning",
+        "development",
+        "test",
+        "complete",
+    ]
 
 
 def test_runner_marks_wandb_failed_when_fine_tuning_errors(monkeypatch, tmp_path) -> None:
