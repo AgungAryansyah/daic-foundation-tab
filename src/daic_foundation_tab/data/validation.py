@@ -136,8 +136,10 @@ def validate_dataset(
     }
 
 
-def validate_regression_dataset(dataset: ParticipantDataset, feature_set: str) -> dict[str, Any]:
-    report = validate_dataset(dataset, feature_set)
+def validate_regression_dataset(
+    dataset: ParticipantDataset, feature_set: str, max_exclusion_fraction: float = 0.05
+) -> dict[str, Any]:
+    report = validate_dataset(dataset, feature_set, max_exclusion_fraction)
     for split in ("train", "dev"):
         scores = pd.to_numeric(
             dataset.table.loc[dataset.table["split"] == split, "target_phq8"], errors="coerce"

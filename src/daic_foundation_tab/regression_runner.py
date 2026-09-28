@@ -168,7 +168,9 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
 
     with _phase(logger, "preparing features"):
         dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
-        validation = validate_regression_dataset(dataset, feature_set)
+        validation = validate_regression_dataset(
+            dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
+        )
         fine_tuning_config = config["evaluation"]["fine_tuning"]
         prepared = prepare_regression_splits(
             dataset,

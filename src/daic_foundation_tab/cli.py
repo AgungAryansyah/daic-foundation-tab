@@ -11,9 +11,12 @@ from daic_foundation_tab.config import load_config
 from daic_foundation_tab.data import build_or_load_dataset
 from daic_foundation_tab.data.discovery import discover_sources
 from daic_foundation_tab.data.labels import load_official_labels
-from daic_foundation_tab.data.validation import validate_dataset
+from daic_foundation_tab.data.validation import validate_dataset, validate_regression_dataset
 from daic_foundation_tab.runner import run_experiment
-from daic_foundation_tab.tracking.test_evaluations import collect_test_evaluations
+from daic_foundation_tab.tracking.test_evaluations import (
+    collect_regression_test_evaluations,
+    collect_test_evaluations,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -27,6 +30,8 @@ def _parser() -> argparse.ArgumentParser:
     compare.add_argument("--output", type=Path)
     collect = subparsers.add_parser("collect-test-results")
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
+    collect_regression = subparsers.add_parser("collect-regression-test-results")
+    collect_regression.add_argument("--output-root", type=Path, default=Path("outputs"))
     return parser
 
 
@@ -57,7 +62,12 @@ def _build_features(config: dict) -> None:
 
 def _validate(config: dict) -> Path:
     dataset = build_or_load_dataset(config)
-    report = validate_dataset(
+    validate = (
+        validate_regression_dataset
+        if config["experiment"]["task"] == "regression"
+        else validate_dataset
+    )
+    report = validate(
         dataset,
         config["experiment"]["feature_set"],
         float(config["data"].get("max_exclusion_fraction", 0.05)),
@@ -112,6 +122,9 @@ def main() -> None:
         return
     if args.command == "collect-test-results":
         print(collect_test_evaluations(args.output_root))
+        return
+    if args.command == "collect-regression-test-results":
+        print(collect_regression_test_evaluations(args.output_root))
         return
     config = load_config(args.config)
     if args.command == "inspect":
