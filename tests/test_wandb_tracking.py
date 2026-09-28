@@ -250,6 +250,33 @@ def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeyp
     ]
 
 
+def test_regression_tracker_records_score_summary_and_mae(monkeypatch, tmp_path) -> None:
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    config = _config()
+    config["experiment"]["task"] = "regression"
+    config["model"]["name"] = "tabiclv2_ft_regressor"
+    validation = _validation()
+    validation["split_statistics"]["train"]["phq8_score"] = {"min": 1.0, "max": 18.0, "mean": 9.5}
+    artifacts = RunArtifacts(tmp_path, "tabiclv2_ft_regressor", "audio", 42)
+
+    tracker = WandbTracker.start(config, artifacts, validation, "cache-key")
+    tracker.record_fine_tuning(
+        pd.Series([1.0, 18.0]),
+        pd.Series([3.0, 13.0]),
+        2,
+        5.0,
+        {"selection_metric": "mae", "best_validation_metric": 2.0},
+    )
+    tracker.record_development({"mae": 2.5, "derived_depressed_f1": 0.5})
+    tracker.complete({"model_name": "Regressor", "checkpoint": "regressor"}, {}, {})
+
+    assert tracker.data_card["fine_tuning"]["training"]["phq8_mean"] == 9.5
+    assert tracker.data_card["splits"]["train"]["phq8_score"]["mean"] == 9.5
+    assert fake_wandb.run.summary["development/mae"] == 2.5
+    assert fake_wandb.run.summary["development/derived_depressed_f1"] == 0.5
+
+
 def test_tracker_loads_wandb_key_from_project_dotenv(monkeypatch, tmp_path) -> None:
     fake_wandb = _FakeWandb()
     monkeypatch.chdir(tmp_path)

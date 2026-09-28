@@ -127,7 +127,14 @@ def _cohort_card(
         "dropped_constant_count": len(validation["dropped_constant"]),
         "near_constant_count": len(validation["near_constant"]),
         "splits": {
-            split: {field: statistics[split].get(field) for field in _COHORT_FIELDS}
+            split: {
+                **{field: statistics[split].get(field) for field in _COHORT_FIELDS},
+                **(
+                    {"phq8_score": statistics[split]["phq8_score"]}
+                    if "phq8_score" in statistics[split]
+                    else {}
+                ),
+            }
             for split in ("train", "dev", "test")
         },
         "exclusions": {
@@ -144,6 +151,16 @@ def _class_summary(target: pd.Series) -> dict[str, int]:
         "participants": len(values),
         "depressed": int(values.sum()),
         "non_depressed": int((values == 0).sum()),
+    }
+
+
+def _score_summary(target: pd.Series) -> dict[str, float | int]:
+    scores = target.astype(float)
+    return {
+        "participants": len(scores),
+        "phq8_min": float(scores.min()),
+        "phq8_max": float(scores.max()),
+        "phq8_mean": float(scores.mean()),
     }
 
 
@@ -290,9 +307,12 @@ class WandbTracker:
         fit_seconds: float,
         metadata: Mapping[str, Any],
     ) -> None:
+        summarize = (
+            _score_summary if self.config["experiment"]["task"] == "regression" else _class_summary
+        )
         fine_tuning = {
-            "training": _class_summary(training_target),
-            "validation": _class_summary(validation_target),
+            "training": summarize(training_target),
+            "validation": summarize(validation_target),
             "feature_count_after_selection": feature_count,
             "fit_seconds": fit_seconds,
             "selection_metric": metadata.get("selection_metric"),
