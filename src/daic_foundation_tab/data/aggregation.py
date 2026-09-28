@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,9 @@ METADATA_COLUMNS = {
     "confidence",
     "success",
     "detection_success",
+    "frameTime",
+    "frameIndex",
+    "name",
 }
 
 
@@ -68,6 +72,16 @@ def _read_source(path: Path, parser: str) -> pd.DataFrame:
         frame.columns = [str(column).strip() for column in frame.columns]
         if "success" in frame.columns:
             frame = frame.loc[pd.to_numeric(frame["success"], errors="coerce") == 1].copy()
+        return frame
+    if parser == "csv":
+        with path.open(encoding="utf-8-sig", newline="") as stream:
+            header = stream.readline()
+        try:
+            delimiter = csv.Sniffer().sniff(header, delimiters=",;\t").delimiter
+        except csv.Error as exc:
+            raise AggregationError(f"Cannot determine CSV delimiter in {path}") from exc
+        frame = pd.read_csv(path, sep=delimiter, skipinitialspace=True)
+        frame.columns = [str(column).strip() for column in frame.columns]
         return frame
     raise AggregationError(f"Unsupported source parser: {parser}")
 

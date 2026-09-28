@@ -92,13 +92,39 @@ uv run --python 3.12 python -m daic_foundation_tab.cli compare \
   outputs/<run-a> outputs/<run-b> outputs/<run-c>
 ```
 
+## E-DAIC CSV preparation
+
+For the E-DAIC file-index download, keep the extracted `labels/` directory and participant `data/<id>_P/features/` directories together. Prepare the OpenSMILE eGeMAPS and OpenFace 2.1 CSVs for the E-DAIC experiment:
+
+```bash
+uv run --python 3.12 python -m daic_foundation_tab.data.prepare_edaic \
+  --source /path/to/edaic \
+  --output data/edaic
+
+uv run --python 3.12 python -m daic_foundation_tab.cli inspect \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli build-features \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli validate \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+```
+
+Preparation checks all 275 participant IDs and both selected feature files before writing the flat dataset. It hard-links files when possible and copies across filesystems. Progress and failures are recorded in `data/edaic/preparation_status.json`.
+
+The supplied E-DAIC binary labels disagree with the project's `PHQ8_Score >= 10` target for some participants. Preparation writes score-only labels, so train, development, and test evaluation derive the target consistently. The status file records disagreement counts by split. The original E-DAIC labels remain in the downloaded source directory.
+
 ## Evaluation protocol
 
 Each participant is represented by one row after temporal mean/std pooling. Frame metadata, participant identifiers, PHQ-8 scores/items, supplied labels, and prediction targets are excluded from the feature matrix. The binary target is derived from `PHQ8_Score >= 10`; supplied binary labels are retained only for auditing.
 
 For each run, the official training split is stratified into an 80% fine-tuning partition and 20% early-stopping validation partition. Feature filtering is fit only on the fine-tuning partition. The official development split is reserved for evaluation and never participates in feature selection, fine-tuning, or checkpoint selection. Repeated internal holdouts use nested train-only early-stopping partitions.
 
-The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. After fine-tuning, every run saves official test predictions and class probabilities to `predictions_test.csv` using the selected checkpoint. The official test split CSV has no labels; when `data/original_labels/full_test_split.csv` is available, its PHQ scores are matched by participant ID only after prediction to calculate `metrics_test.json` and `metrics_test.csv`. Set `data.test_ground_truth` to null to save predictions without test metrics.
+The default profile allows up to 50 epochs, selects on validation ROC-AUC, and retains only `checkpoints/best.ckpt`. After fine-tuning, every run saves official test predictions and class probabilities to `predictions_test.csv` using the selected checkpoint. The DAIC-WOZ test split CSV has no labels; when `data/original_labels/full_test_split.csv` is available, its PHQ scores are matched by participant ID only after prediction to calculate `metrics_test.json` and `metrics_test.csv`. The prepared E-DAIC test split contains PHQ scores, which are used only after prediction. Set `data.test_ground_truth` to null to save predictions without test metrics.
 
 ## Research records
 
