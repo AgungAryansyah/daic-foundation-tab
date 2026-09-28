@@ -109,14 +109,29 @@ uv run --python 3.12 python -m daic_foundation_tab.cli build-features \
 
 uv run --python 3.12 python -m daic_foundation_tab.cli validate \
   --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
-
-uv run --python 3.12 python -m daic_foundation_tab.cli run \
-  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
 ```
 
 Preparation checks all 275 participant IDs and both selected feature files before writing the flat dataset. It hard-links files when possible and copies across filesystems. Progress and failures are recorded in `data/edaic/preparation_status.json`.
 
 The supplied E-DAIC binary labels disagree with the project's `PHQ8_Score >= 10` target for some participants. Preparation writes score-only labels, so train, development, and test evaluation derive the target consistently. The status file records disagreement counts by split. The original E-DAIC labels remain in the downloaded source directory.
+
+### Train on E-DAIC
+
+Run these commands from the repository root on the remote GPU server after validation succeeds. Complete the CUDA and W&B setup above first. Start with the one-epoch smoke run, which skips repeated holdouts and bootstrap:
+
+```bash
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual_smoke.yaml
+```
+
+Then run the full E-DAIC audio-visual experiment:
+
+```bash
+uv run --python 3.12 python -m daic_foundation_tab.cli run \
+  --config configs/experiments/tabiclv2_ft_edaic_audio_visual.yaml
+```
+
+The full configuration allows up to 50 training epochs, then runs 30 repeated holdouts and 2,000 bootstrap iterations. Each run writes its checkpoint, predictions, metrics, and summary under `outputs/`.
 
 ## Evaluation protocol
 

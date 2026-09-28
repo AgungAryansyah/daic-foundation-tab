@@ -1,0 +1,16 @@
+extends:
+  - tabiclv2_ft_edaic_audio_visual.yaml
+
+experiment:
+  name: tabiclv2_ft_binary_edaic_audio_visual_smoke
+
+model:
+  parameters:
+    epochs: 1
+
+evaluation:
+  repeated_holdout:
+    enabled: false
+
+bootstrap:
+  enabled: false
