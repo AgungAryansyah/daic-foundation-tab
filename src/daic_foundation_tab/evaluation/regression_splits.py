@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
@@ -9,6 +12,8 @@ from sklearn.model_selection import ShuffleSplit
 from daic_foundation_tab.data.dataset import ParticipantDataset
 from daic_foundation_tab.data.validation import fit_feature_selection, validate_regression_dataset
 from daic_foundation_tab.evaluation.fine_tuning import FineTunePartition, PreparedFineTuneSplits
+from daic_foundation_tab.evaluation.regression import regression_metrics
+from daic_foundation_tab.models.base import FineTunableRegressor
 
 
 @dataclass(frozen=True)
@@ -107,3 +112,61 @@ def prepare_regression_splits(
         selection=selection,
         assignment=partition.assignment,
     )
+
+
+def repeated_regression_holdout(
+    features: pd.DataFrame,
+    target: pd.Series,
+    participant_ids: pd.Series,
+    repeats: int,
+    outer_validation_fraction: float,
+    inner_validation_fraction: float,
+    seed_start: int,
+    model_factory: Callable[[int], FineTunableRegressor],
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> tuple[pd.DataFrame, dict[int, pd.DataFrame]]:
+    if repeats < 1:
+        raise ValueError("Repeated regression holdout requires at least one repeat")
+    rows: list[dict[str, float | int]] = []
+    assignments: dict[int, pd.DataFrame] = {}
+    for completed, seed in enumerate(range(seed_start, seed_start + repeats), start=1):
+        partitions = nested_regression_partitions(
+            target,
+            participant_ids,
+            outer_validation_fraction,
+            inner_validation_fraction,
+            seed,
+        )
+        outer_features = features.iloc[partitions.outer.training_indices].reset_index(drop=True)
+        outer_target = target.iloc[partitions.outer.training_indices].reset_index(drop=True)
+        selection = fit_feature_selection(outer_features.iloc[partitions.inner.training_indices])
+        train_features = outer_features.iloc[partitions.inner.training_indices].reindex(
+            columns=selection.columns
+        )
+        validation_features = outer_features.iloc[partitions.inner.validation_indices].reindex(
+            columns=selection.columns
+        )
+        evaluation_features = features.iloc[partitions.outer.validation_indices].reindex(
+            columns=selection.columns
+        )
+        model = model_factory(seed)
+        with TemporaryDirectory(prefix="daic_regression_ft_") as directory:
+            model.fit(
+                train_features,
+                outer_target.iloc[partitions.inner.training_indices],
+                validation_features=validation_features,
+                validation_target=outer_target.iloc[partitions.inner.validation_indices],
+                checkpoint_directory=Path(directory),
+            )
+            prediction = model.predict(evaluation_features)
+        metrics = regression_metrics(target.iloc[partitions.outer.validation_indices], prediction)
+        rows.append(
+            {
+                "seed": seed,
+                **{key: value for key, value in metrics.items() if isinstance(value, float)},
+            }
+        )
+        assignments[seed] = partitions.assignment
+        if progress_callback is not None:
+            progress_callback(completed, repeats)
+    return pd.DataFrame(rows), assignments

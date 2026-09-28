@@ -8,6 +8,7 @@ from daic_foundation_tab.evaluation.regression_splits import (
     nested_regression_partitions,
     prepare_regression_splits,
     regression_fine_tune_partition,
+    repeated_regression_holdout,
 )
 
 
@@ -63,3 +64,32 @@ def test_regression_feature_selection_uses_only_training_partition() -> None:
     assert prepared.dev_y.tolist() == [2.0, 14.0]
     assert prepared.assignment.equals(partition.assignment)
     assert prepared.test_x.columns.tolist() == ["signal"]
+
+
+def test_repeated_regression_holdout_selects_features_inside_inner_training() -> None:
+    target = pd.Series(np.arange(20, dtype=float))
+    participant_ids = pd.Series([str(index) for index in range(len(target))])
+    partitions = nested_regression_partitions(target, participant_ids, 0.2, 0.25, 42)
+    constant = np.ones(len(target), dtype=float)
+    inner_training = partitions.outer.training_indices[partitions.inner.training_indices]
+    constant[inner_training] = 0.0
+    features = pd.DataFrame({"signal": target, "inner_constant": constant})
+    seen_columns = []
+
+    class FakeModel:
+        def fit(self, train_x, train_y, *, validation_features, validation_target, checkpoint_directory):
+            seen_columns.append(train_x.columns.tolist())
+            assert validation_features.columns.tolist() == train_x.columns.tolist()
+            return self
+
+        def predict(self, evaluation_x):
+            assert evaluation_x.columns.tolist() == seen_columns[-1]
+            return np.zeros(len(evaluation_x))
+
+    metrics, assignments = repeated_regression_holdout(
+        features, target, participant_ids, 1, 0.2, 0.25, 42, lambda _: FakeModel()
+    )
+
+    assert seen_columns == [["signal"]]
+    assert metrics["seed"].tolist() == [42]
+    assert len(assignments[42]) == len(target)
