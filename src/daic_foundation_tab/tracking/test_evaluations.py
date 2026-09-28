@@ -10,13 +10,19 @@ from typing import Any
 
 import yaml
 
-_IDENTITY_COLUMNS = ("run", "experiment", "dataset", "model", "feature_set", "seed")
+_IDENTITY_COLUMNS = ("run", "experiment", "dataset", "model", "feature_set", "seed", "threshold")
 
 
 def _evaluation_row(metrics_path: Path) -> dict[str, Any]:
     run = metrics_path.parent
     config = yaml.safe_load((run / "config_resolved.yaml").read_text(encoding="utf-8"))
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    threshold_path = run / "decision_threshold.json"
+    threshold = (
+        json.loads(threshold_path.read_text(encoding="utf-8"))["threshold"]
+        if threshold_path.is_file()
+        else 0.5
+    )
     return {
         "run": run.name,
         "experiment": config["experiment"].get("name", ""),
@@ -24,6 +30,7 @@ def _evaluation_row(metrics_path: Path) -> dict[str, Any]:
         "model": config["model"]["name"],
         "feature_set": config["experiment"]["feature_set"],
         "seed": config["project"]["seed"],
+        "threshold": threshold,
         **{
             key: value
             for key, value in metrics.items()

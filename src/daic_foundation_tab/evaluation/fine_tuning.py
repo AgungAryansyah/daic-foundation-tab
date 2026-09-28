@@ -111,6 +111,8 @@ def repeated_fine_tune_holdout(
     inner_validation_fraction: float,
     seed_start: int,
     model_factory: Callable[[int], FineTunableClassifier],
+    *,
+    threshold: float = 0.5,
 ) -> tuple[pd.DataFrame, dict[int, pd.DataFrame]]:
     rows: list[dict[str, float | int]] = []
     assignments: dict[int, pd.DataFrame] = {}
@@ -146,8 +148,8 @@ def repeated_fine_tune_holdout(
                 validation_target=outer_target.iloc[inner.validation_indices],
                 checkpoint_directory=Path(directory),
             )
-            prediction = model.predict(evaluation_features)
             probability = _positive_probability(model, evaluation_features)
+            prediction = (probability > threshold).astype(int)
         metrics = classification_metrics(target.iloc[outer.validation_indices], prediction, probability)
         rows.append({"seed": seed, **{key: value for key, value in metrics.items() if isinstance(value, float)}})
         inner_assignment = inner.assignment.copy()

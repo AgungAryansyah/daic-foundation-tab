@@ -117,9 +117,11 @@ def test_repeated_fine_tune_holdout_nests_disjoint_partitions() -> None:
         inner_validation_fraction=0.25,
         seed_start=0,
         model_factory=lambda _: _FakeFineTunedModel(),
+        threshold=0.25,
     )
 
     assert metrics["seed"].tolist() == [0, 1]
+    assert metrics["recall_sensitivity"].tolist() == [1.0, 1.0]
     for assignment in assignments.values():
         groups = {role: set(group["participant_id"]) for role, group in assignment.groupby("role")}
         assert not groups["finetune_train"] & groups["finetune_validation"]

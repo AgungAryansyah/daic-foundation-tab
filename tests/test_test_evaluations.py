@@ -18,6 +18,7 @@ def test_collect_test_evaluations_backfills_runs_without_duplicates(tmp_path) ->
         config = {
             "project": {"seed": 42},
             "experiment": {"name": f"edaic_{feature_set}", "feature_set": feature_set},
+            "evaluation": {"threshold": 0.25 if feature_set == "visual" else 0.5},
             "data": {"root": "data/edaic"},
             "model": {"name": "tabiclv2_ft"},
         }
@@ -31,6 +32,8 @@ def test_collect_test_evaluations_backfills_runs_without_duplicates(tmp_path) ->
         (run / "metrics_test.csv").write_text(
             f"macro_f1,accuracy\n{score},{score}\n", encoding="utf-8"
         )
+        if feature_set == "visual":
+            (run / "decision_threshold.json").write_text('{"threshold": 0.25}', encoding="utf-8")
     incomplete = tmp_path / "incomplete"
     incomplete.mkdir()
     (incomplete / "metrics_test.json").write_text('{"macro_f1": 0.9}', encoding="utf-8")
@@ -45,5 +48,6 @@ def test_collect_test_evaluations_backfills_runs_without_duplicates(tmp_path) ->
     assert comparison["experiment"].tolist() == ["edaic_audio", "edaic_visual"]
     assert comparison["dataset"].tolist() == ["edaic", "edaic"]
     assert comparison["feature_set"].tolist() == ["audio", "visual"]
+    assert comparison["threshold"].tolist() == [0.5, 0.25]
     assert comparison["macro_f1"].tolist() == [0.5, 0.75]
     assert "confusion_matrix" not in comparison.columns

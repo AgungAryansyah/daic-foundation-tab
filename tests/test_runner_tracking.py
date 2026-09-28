@@ -141,6 +141,7 @@ def test_runner_scores_test_after_training_when_ground_truth_is_configured(
     config = write_synthetic_dataset(tmp_path / "data")
     config["_config_path"] = "synthetic.yaml"
     config["evaluation"]["test_predictions"] = True
+    config["evaluation"]["threshold"] = 0.25
     config["data"]["test_ground_truth"] = "original_labels/full_test_split.csv"
     pd.DataFrame(
         {
@@ -157,11 +158,15 @@ def test_runner_scores_test_after_training_when_ground_truth_is_configured(
 
     predictions = pd.read_csv(output / "predictions_test.csv")
     assert predictions["y_true"].tolist() == [0, 1]
+    assert predictions["y_pred"].tolist() == [1, 1]
+    assert predictions["prob_depressed"].tolist() == [0.3, 0.3]
     assert (output / "metrics_test.json").is_file()
     assert (output / "metrics_test.csv").is_file()
+    assert '"threshold": 0.25' in (output / "decision_threshold.json").read_text(encoding="utf-8")
     comparison = pd.read_csv(output.parent / "test_evaluations.csv")
     assert comparison["run"].tolist() == [output.name]
     assert comparison["feature_set"].tolist() == ["audio_visual"]
+    assert comparison["threshold"].tolist() == [0.25]
     assert comparison.loc[0, "macro_f1"] == pd.read_csv(output / "metrics_test.csv").loc[0, "macro_f1"]
     assert "## Test Result" in (output / "summary.md").read_text()
     assert [call[0] for call in _FakeTracker.instances[0].calls] == [

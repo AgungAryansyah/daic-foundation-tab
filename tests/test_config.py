@@ -50,6 +50,15 @@ def test_rejects_automatic_fine_tuning_device() -> None:
         validate_config(config)
 
 
+def test_rejects_invalid_decision_threshold() -> None:
+    project_root = Path(__file__).parents[1]
+    config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")
+    config["evaluation"]["threshold"] = 1.1
+
+    with pytest.raises(ConfigError, match="evaluation.threshold"):
+        validate_config(config)
+
+
 def test_rejects_invalid_wandb_mode() -> None:
     project_root = Path(__file__).parents[1]
     config = load_config(project_root / "configs/experiments/tabiclv2_ft_audio_complete_cohort.yaml")

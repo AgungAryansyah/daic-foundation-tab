@@ -128,6 +128,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
     validation = validate_dataset(
         dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
     )
+    threshold = float(config["evaluation"]["threshold"])
     fine_tuning_config = config["evaluation"]["fine_tuning"]
     prepared = prepare_fine_tune_splits(
         dataset,
@@ -200,8 +201,8 @@ def run_experiment(config: dict[str, Any]) -> Path:
             fit_seconds,
             finetune_metadata,
         )
-        prediction, predict_seconds = timed_call(model.predict, prepared.dev_x)
-        probability, probability_seconds = timed_call(_positive_probability, model, prepared.dev_x)
+        probability, predict_seconds = timed_call(_positive_probability, model, prepared.dev_x)
+        prediction = (probability > threshold).astype(int)
         metrics = classification_metrics(prepared.dev_y, prediction, probability)
         tracker.record_development(metrics)
         logger.info("development macro_f1=%s balanced_accuracy=%s", metrics["macro_f1"], metrics["balanced_accuracy"])
@@ -218,10 +219,10 @@ def run_experiment(config: dict[str, Any]) -> Path:
         test_metrics = None
         if config["evaluation"].get("test_predictions", False):
             logger.info("generating official test predictions")
-            test_prediction, test_predict_seconds = timed_call(model.predict, prepared.test_x)
-            test_probability, test_probability_seconds = timed_call(
+            test_probability, test_predict_seconds = timed_call(
                 _positive_probability, model, prepared.test_x
             )
+            test_prediction = (test_probability > threshold).astype(int)
             test_ids = dataset.table.loc[dataset.table["split"] == "test", "participant_id"]
             ground_truth_path = config["data"].get("test_ground_truth")
             test_target = None
@@ -231,6 +232,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
                     test_target = load_test_ground_truth(label_path, test_ids)
                     test_metrics = classification_metrics(test_target, test_prediction, test_probability)
                     artifacts.json("metrics_test.json", test_metrics)
+                    artifacts.json("decision_threshold.json", {"threshold": threshold})
                     artifacts.csv(
                         "metrics_test.csv",
                         pd.DataFrame([{key: value for key, value in test_metrics.items() if isinstance(value, float)}]),
@@ -249,7 +251,6 @@ def run_experiment(config: dict[str, Any]) -> Path:
             )
             artifacts.csv("predictions_test.csv", test_predictions)
             predict_seconds += test_predict_seconds
-            probability_seconds += test_probability_seconds
             logger.info("saved official test predictions for %s participants", len(test_predictions))
 
         bootstrap_summary = None
@@ -280,6 +281,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
                 float(fine_tuning_config["validation_fraction"]),
                 int(repeated_config["seed_start"]),
                 lambda repeat_seed: _model_for_seed(config["model"], repeat_seed),
+                threshold=threshold,
             )
             repeated_summary = repeated_fine_tune_summary(repeated_metrics)
             artifacts.csv("repeated_holdout_metrics.csv", repeated_metrics)
@@ -298,7 +300,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
             "ended_at": ended_at.isoformat(),
             "feature_build_seconds": feature_build_seconds,
             "fit_seconds": fit_seconds,
-            "predict_seconds": predict_seconds + probability_seconds,
+            "predict_seconds": predict_seconds,
             "total_seconds": time.perf_counter() - started,
         }
         model_metadata = model.run_metadata()

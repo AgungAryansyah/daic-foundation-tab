@@ -87,6 +87,13 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigError("model.parameters.device must match runtime.device")
     if parameters.get("amp") is not True:
         raise ConfigError("GPU-only runs require model.parameters.amp to be true")
+    threshold = config["evaluation"].get("threshold")
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or not 0 <= threshold <= 1
+    ):
+        raise ConfigError("evaluation.threshold must be between zero and one")
     fine_tuning = config["evaluation"].get("fine_tuning")
     if not isinstance(fine_tuning, Mapping):
         raise ConfigError("TabICLv2-FT requires evaluation.fine_tuning settings")
