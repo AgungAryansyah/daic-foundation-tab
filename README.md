@@ -6,7 +6,7 @@ DAIC-WOZ is licensed sensitive data and is not included in this repository. Keep
 
 ## Remote environment
 
-Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.5.1 with CUDA 12.1, and an NVIDIA driver compatible with CUDA 12.2 or later. CPU fine-tuning is intentionally unsupported.
+Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.5.1 with CUDA 11.8, and an NVIDIA driver version 450.80.02 or later for CUDA 11.x minor-version compatibility. CPU fine-tuning is intentionally unsupported.
 
 ```bash
 nvidia-smi
