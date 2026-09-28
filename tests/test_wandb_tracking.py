@@ -263,6 +263,36 @@ def test_tracker_loads_wandb_key_from_project_dotenv(monkeypatch, tmp_path) -> N
     assert os.environ["WANDB_API_KEY"] == "test-key"
 
 
+def test_tracker_uses_run_directory_for_artifact_staging_by_default(monkeypatch, tmp_path) -> None:
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    artifacts = RunArtifacts(tmp_path, "tabiclv2_ft", "audio", 42)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "environ", os.environ.copy())
+        patch.delenv("WANDB_DATA_DIR", raising=False)
+        WandbTracker.start(_config(), artifacts, _validation(), "cache-key")
+
+        data_dir = artifacts.path / "wandb_data"
+        assert os.environ["WANDB_DATA_DIR"] == str(data_dir.resolve())
+        assert (data_dir / "artifacts" / "staging").is_dir()
+
+
+def test_tracker_respects_custom_artifact_staging_directory(monkeypatch, tmp_path) -> None:
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    artifacts = RunArtifacts(tmp_path / "outputs", "tabiclv2_ft", "audio", 42)
+    custom_dir = tmp_path / "custom-wandb-data"
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "environ", os.environ.copy())
+        patch.setenv("WANDB_DATA_DIR", str(custom_dir))
+        WandbTracker.start(_config(), artifacts, _validation(), "cache-key")
+
+        assert os.environ["WANDB_DATA_DIR"] == str(custom_dir)
+        assert (custom_dir / "artifacts" / "staging").is_dir()
+
+
 def test_tracker_supports_offline_mode(monkeypatch, tmp_path) -> None:
     fake_wandb = _FakeWandb()
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)

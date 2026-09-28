@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import tempfile
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -213,6 +215,13 @@ class WandbTracker:
         )
         if tracker.enabled and tracker.mode != "disabled":
             load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
+            data_dir = os.environ.setdefault(
+                "WANDB_DATA_DIR", str((artifacts.path / "wandb_data").resolve())
+            )
+            staging_dir = Path(data_dir) / "artifacts" / "staging"
+            staging_dir.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryFile(dir=staging_dir):
+                pass
             import wandb
 
             experiment = config["experiment"]
