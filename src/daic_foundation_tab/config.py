@@ -73,8 +73,6 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigError("Phase 1 feature_set must be audio, visual, or audio_visual")
     if config["model"].get("name") != "tabiclv2_ft":
         raise ConfigError("Only tabiclv2_ft is supported; the standalone tabiclv2 ICL path was retired")
-    if config["evaluation"].get("test_predictions", False):
-        raise ConfigError("TabICLv2-FT test predictions require a separate frozen finalization workflow")
     runtime = config["runtime"]
     if not isinstance(runtime, Mapping):
         raise ConfigError("runtime must be a mapping")
