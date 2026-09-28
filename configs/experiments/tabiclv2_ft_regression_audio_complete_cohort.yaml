@@ -5,3 +5,6 @@ extends:
 experiment:
   name: tabiclv2_ft_regression_audio_complete_cohort_mean_std
   task: regression
+
+evaluation:
+  threshold: null

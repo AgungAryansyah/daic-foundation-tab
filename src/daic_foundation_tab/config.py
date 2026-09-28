@@ -102,6 +102,8 @@ def validate_config(config: Mapping[str, Any]) -> None:
             raise ConfigError("evaluation.threshold must be between zero and one")
     elif config["model"]["parameters"].get("eval_metric") != "mae":
         raise ConfigError("Regression fine-tuning requires model.parameters.eval_metric to be mae")
+    elif config["evaluation"].get("threshold") is not None:
+        raise ConfigError("Regression does not use evaluation.threshold; set it to null")
     fine_tuning = config["evaluation"].get("fine_tuning")
     if not isinstance(fine_tuning, Mapping):
         raise ConfigError("TabICLv2-FT requires evaluation.fine_tuning settings")

@@ -72,6 +72,8 @@ def test_regression_config_requires_regressor_and_mae() -> None:
         validate_config(config)
 
     config["model"]["parameters"]["eval_metric"] = "mae"
+    with pytest.raises(ConfigError, match="evaluation.threshold"):
+        validate_config(config)
     config["evaluation"].pop("threshold")
     validate_config(config)
 
@@ -94,6 +96,7 @@ def test_regression_presets_cover_each_dataset_and_modality(dataset, modality) -
     assert config["model"]["name"] == "tabiclv2_ft_regressor"
     assert config["model"]["checkpoint_version"] == "tabicl-regressor-v2-20260212.ckpt"
     assert config["model"]["parameters"]["eval_metric"] == "mae"
+    assert config["evaluation"]["threshold"] is None
     assert config["evaluation"]["test_predictions"] is True
 
 

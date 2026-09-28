@@ -67,6 +67,7 @@ def _config(tmp_path):
     config["model"]["name"] = "tabiclv2_ft_regressor"
     config["model"]["parameters"]["eval_metric"] = "mae"
     config["model"]["parameters"]["epochs"] = 2
+    config["evaluation"]["threshold"] = None
     config["evaluation"]["test_predictions"] = True
     config["evaluation"]["repeated_holdout"] = {
         "enabled": True,
