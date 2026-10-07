@@ -194,6 +194,14 @@ def test_nonfinite_epoch_keeps_finite_baseline(monkeypatch, tmp_path):
     assert model.finetune_metadata()["best_validation_metric"] == 0.75
 
 
+@pytest.mark.parametrize("metric", [float("inf"), float("-inf")])
+def test_infinite_epoch_fails_instead_of_misreporting_selected_weights(monkeypatch, tmp_path, metric):
+    _, exports = _install_fine_tuner(monkeypatch, [0.75, metric])
+    with pytest.raises(TabPFN35FineTuningError, match="infinite"):
+        _fit(_model(), tmp_path)
+    assert not exports
+
+
 def test_invalid_targets_and_existing_checkpoints_are_rejected_before_training(tmp_path):
     with pytest.raises(TabPFN35FineTuningError, match="finite"):
         _fit(_model(True), tmp_path, target=pd.Series([np.nan] * 8))

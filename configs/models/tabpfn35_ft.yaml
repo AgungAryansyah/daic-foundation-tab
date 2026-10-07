@@ -12,6 +12,7 @@ model:
     n_estimators_finetune: 2
     n_estimators_validation: 2
     n_estimators_final_inference: 8
+    use_fixed_preprocessing_seed: false
     n_finetune_ctx_plus_query_samples: 10000
     finetune_ctx_query_split_ratio: 0.2
     n_inference_subsample_samples: null

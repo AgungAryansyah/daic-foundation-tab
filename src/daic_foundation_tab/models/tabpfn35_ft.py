@@ -114,6 +114,8 @@ class TabPFN35FineTunedModel:
                         if not math.isfinite(metric):
                             raise TabPFN35FineTuningError("Initial validation metric must be finite")
                         adapter._baseline_metric = metric
+                    elif math.isinf(metric):
+                        raise TabPFN35FineTuningError("Validation metric must not be infinite")
                     if math.isfinite(metric) and (
                         adapter._best_metric is None
                         or self._is_improvement(metric, adapter._best_metric)
