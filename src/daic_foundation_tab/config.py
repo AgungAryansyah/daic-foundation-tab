@@ -75,9 +75,16 @@ def validate_config(config: Mapping[str, Any]) -> None:
     model_name = config["model"].get("name")
     if model_name == "tabiclv2":
         raise ConfigError("Only tabiclv2_ft is supported; the standalone tabiclv2 ICL path was retired")
-    expected_model = "tabiclv2_ft" if task == "classification" else "tabiclv2_ft_regressor"
-    if model_name != expected_model:
-        raise ConfigError(f"{task} requires model.name to be {expected_model}")
+    expected_models = (
+        ("tabiclv2_ft", "tabpfn35_ft")
+        if task == "classification"
+        else ("tabiclv2_ft_regressor", "tabpfn35_ft_regressor")
+    )
+    if model_name not in expected_models:
+        raise ConfigError(f"{task} requires model.name to be {' or '.join(expected_models)}")
+    is_tabpfn = model_name.startswith("tabpfn35")
+    if is_tabpfn and config["model"].get("model_version") != "v3.5":
+        raise ConfigError("TabPFN-3.5 requires model.model_version to be v3.5")
     runtime = config["runtime"]
     if not isinstance(runtime, Mapping):
         raise ConfigError("runtime must be a mapping")
@@ -90,8 +97,10 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigError("model.parameters must be a mapping")
     if parameters.get("device") != runtime["device"]:
         raise ConfigError("model.parameters.device must match runtime.device")
-    if parameters.get("amp") is not True:
+    if not is_tabpfn and parameters.get("amp") is not True:
         raise ConfigError("GPU-only runs require model.parameters.amp to be true")
+    if is_tabpfn and parameters.get("early_stopping", True) is not True:
+        raise ConfigError("TabPFN experiments require early_stopping for checkpoint selection")
     if task == "classification":
         threshold = config["evaluation"].get("threshold")
         if (
@@ -100,13 +109,14 @@ def validate_config(config: Mapping[str, Any]) -> None:
             or not 0 <= threshold <= 1
         ):
             raise ConfigError("evaluation.threshold must be between zero and one")
-    elif config["model"]["parameters"].get("eval_metric") != "mae":
-        raise ConfigError("Regression fine-tuning requires model.parameters.eval_metric to be mae")
+    elif parameters.get("eval_metric") != ("mse" if is_tabpfn else "mae"):
+        metric = "mse" if is_tabpfn else "mae"
+        raise ConfigError(f"Regression fine-tuning requires model.parameters.eval_metric to be {metric}")
     elif config["evaluation"].get("threshold") is not None:
         raise ConfigError("Regression does not use evaluation.threshold; set it to null")
     fine_tuning = config["evaluation"].get("fine_tuning")
     if not isinstance(fine_tuning, Mapping):
-        raise ConfigError("TabICLv2-FT requires evaluation.fine_tuning settings")
+        raise ConfigError("Fine-tuning requires evaluation.fine_tuning settings")
     validation_fraction = fine_tuning.get("validation_fraction")
     if not isinstance(validation_fraction, (int, float)) or not 0 < validation_fraction < 1:
         raise ConfigError("evaluation.fine_tuning.validation_fraction must be between zero and one")

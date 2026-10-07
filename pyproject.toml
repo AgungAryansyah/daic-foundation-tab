@@ -17,6 +17,7 @@ dependencies = [
     "scikit-learn>=1.5",
     "scipy>=1.13",
     "tabicl[finetune]",
+    "tabpfn==9.1.0",
     "torch==2.5.1+cu118",
     "wandb>=0.29",
 ]
@@ -37,7 +38,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "real_model: requires a locally available TabICL checkpoint",
+    "real_model: requires CUDA and a locally available foundation-model checkpoint",
 ]
 
 [tool.ruff]
