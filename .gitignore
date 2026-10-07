@@ -20,3 +20,5 @@ cache/
 outputs/
 *.parquet
 *.ckpt
+*.pth
+*.safetensors
