@@ -10,6 +10,7 @@ import pytest
 
 from daic_foundation_tab import regression_runner, runner
 from daic_foundation_tab.config import load_config, validate_config
+from daic_foundation_tab.matrix import verify_run
 
 from .helpers import write_synthetic_dataset
 from .test_tabpfn35_adapter import _install_fine_tuner
@@ -66,6 +67,7 @@ def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp
         monkeypatch.setattr(module, "environment_metadata", lambda device: {"cuda_device": device})
 
     output = runner.run_experiment(config)
+    verify_run(output, config)
 
     def saved(name):
         return json.loads((output / name).read_text(encoding="utf-8"))
@@ -102,3 +104,7 @@ def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp
         assert f"phase={phase} status=complete" in log
     assert "progress=2/2 repeats (100.0%)" in log
     assert "progress=10/10 resamples (100.0%)" in log
+    checkpoint = Path(saved("finetune_metadata.json")["checkpoint_path"])
+    checkpoint.write_bytes(b"corrupt checkpoint")
+    with pytest.raises(ValueError, match="hash"):
+        verify_run(output, config)

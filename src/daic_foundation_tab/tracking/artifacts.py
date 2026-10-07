@@ -10,7 +10,7 @@ import pandas as pd
 
 class RunArtifacts:
     def __init__(self, output_root: str | Path, model_name: str, feature_set: str, seed: int) -> None:
-        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         self.path = Path(output_root).expanduser().resolve() / (
             f"{timestamp}_{model_name}_{feature_set}_{seed}"
         )
