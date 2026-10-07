@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -81,7 +82,10 @@ def _fingerprint(config: dict[str, Any], discovery: DiscoveryResult) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def _build_dataset(config: dict[str, Any], labels: LabelLoadResult, discovery: DiscoveryResult) -> ParticipantDataset:
+def _build_dataset(
+    config: dict[str, Any], labels: LabelLoadResult, discovery: DiscoveryResult,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> ParticipantDataset:
     label_rows = labels.table.set_index("participant_id")
     source_groups = config["data"]["source_groups"]
     required_groups = _enabled_groups(config)
@@ -91,7 +95,7 @@ def _build_dataset(config: dict[str, Any], labels: LabelLoadResult, discovery: D
     source_quality: dict[str, dict[str, Any]] = {}
     exclusions: list[str] = []
 
-    for participant in discovery.participants:
+    for completed, participant in enumerate(discovery.participants, start=1):
         label = label_rows.loc[participant.participant_id]
         row: dict[str, Any] = {
             "participant_id": participant.participant_id,
@@ -127,6 +131,8 @@ def _build_dataset(config: dict[str, Any], labels: LabelLoadResult, discovery: D
         reconciliation_row["included"] = not missing
         reconciliation_row["exclusion_reason"] = "; ".join(f"missing {group}" for group in missing)
         reconciliation.append(reconciliation_row)
+        if progress_callback is not None:
+            progress_callback(completed, len(discovery.participants))
         if missing:
             exclusions.append(
                 f"{participant.participant_id} ({label['split']}): {reconciliation_row['exclusion_reason']}"
@@ -171,13 +177,18 @@ def _cache_paths(config: dict[str, Any], cache_key: str) -> dict[str, Path]:
     }
 
 
-def build_or_load_dataset(config: dict[str, Any]) -> ParticipantDataset:
+def build_or_load_dataset(
+    config: dict[str, Any],
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> ParticipantDataset:
     labels = load_official_labels(config["data"])
     discovery = discover_sources(labels.table, config["data"])
+    if progress_callback is not None:
+        progress_callback(0, len(discovery.participants))
     cache_key = _fingerprint(config, discovery)
     paths = _cache_paths(config, cache_key)
     if all(path.exists() for path in paths.values()):
-        return ParticipantDataset(
+        dataset = ParticipantDataset(
             table=pd.read_parquet(paths["table"]),
             manifest=pd.read_csv(paths["manifest"]),
             reconciliation=pd.read_csv(paths["reconciliation"]),
@@ -185,8 +196,11 @@ def build_or_load_dataset(config: dict[str, Any]) -> ParticipantDataset:
             label_audit=json.loads(paths["label_audit"].read_text(encoding="utf-8")),
             cache_key=cache_key,
         )
+        if progress_callback is not None:
+            progress_callback(len(discovery.participants), len(discovery.participants))
+        return dataset
 
-    dataset = _build_dataset(config, labels, discovery)
+    dataset = _build_dataset(config, labels, discovery, progress_callback)
     dataset.table.to_parquet(paths["table"], index=False)
     dataset.manifest.to_csv(paths["manifest"], index=False)
     dataset.reconciliation.to_csv(paths["reconciliation"], index=False)

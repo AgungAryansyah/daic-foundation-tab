@@ -13,6 +13,7 @@ from daic_foundation_tab.data.discovery import discover_sources
 from daic_foundation_tab.data.labels import load_official_labels
 from daic_foundation_tab.data.validation import validate_dataset, validate_regression_dataset
 from daic_foundation_tab.runner import run_experiment
+from daic_foundation_tab.tracking.logging import configure_run_logger, log_progress, phase
 from daic_foundation_tab.tracking.test_evaluations import (
     collect_regression_test_evaluations,
     collect_test_evaluations,
@@ -54,7 +55,15 @@ def _inspect(config: dict) -> Path:
 
 
 def _build_features(config: dict) -> None:
-    dataset = build_or_load_dataset(config)
+    output = _output_path(config, "feature_build")
+    logger = configure_run_logger(output / "run.log", config["logging"]["level"])
+    with phase(logger, "preparing features") as started:
+        dataset = build_or_load_dataset(
+            config,
+            progress_callback=lambda completed, total: log_progress(
+                logger, "preparing features", completed, total, started
+            ),
+        )
     print(f"cache_key={dataset.cache_key}")
     print(f"participants={len(dataset.table)}")
     print(f"features={len(dataset.manifest)}")

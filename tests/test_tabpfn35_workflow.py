@@ -104,6 +104,7 @@ def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp
         assert f"phase={phase} status=complete" in log
     assert "progress=2/2 repeats (100.0%)" in log
     assert "progress=10/10 resamples (100.0%)" in log
+    assert "progress=24/24 participants (100.0%)" in log
     checkpoint = Path(saved("finetune_metadata.json")["checkpoint_path"])
     checkpoint.write_bytes(b"corrupt checkpoint")
     with pytest.raises(ValueError, match="hash"):

@@ -117,8 +117,13 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         "run_id=%s task=regression seed=%s feature_set=%s", artifacts.path.name, seed, feature_set
     )
 
-    with phase(logger, "preparing features"):
-        dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
+    with phase(logger, "preparing features") as phase_started:
+        dataset, feature_build_seconds = timed_call(
+            build_or_load_dataset, config,
+            progress_callback=lambda completed, total: log_progress(
+                logger, "preparing features", completed, total, phase_started
+            ),
+        )
         validation = validate_regression_dataset(
             dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
         )

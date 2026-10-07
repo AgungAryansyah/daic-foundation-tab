@@ -142,8 +142,13 @@ def run_experiment(config: dict[str, Any]) -> Path:
     logger.info("dataset_root=%s", config["data"]["root"])
     logger.info("feature_set=%s", feature_set)
     logger.info("seed=%s", seed)
-    with phase(logger, "preparing features"):
-        dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
+    with phase(logger, "preparing features") as phase_started:
+        dataset, feature_build_seconds = timed_call(
+            build_or_load_dataset, config,
+            progress_callback=lambda completed, total: log_progress(
+                logger, "preparing features", completed, total, phase_started
+            ),
+        )
         validation = validate_dataset(
             dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
         )

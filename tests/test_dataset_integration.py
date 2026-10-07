@@ -31,3 +31,13 @@ def test_explicit_complete_cohort_policy_logs_missing_modalities(tmp_path) -> No
     excluded = dataset.reconciliation.loc[dataset.reconciliation["participant_id"] == "400"].iloc[0]
     assert not excluded["included"]
     assert excluded["exclusion_reason"] == "missing covarep"
+
+
+def test_feature_preparation_reports_participants_for_build_and_cache_load(tmp_path):
+    config = write_synthetic_dataset(tmp_path / "dataset")
+    updates = []
+    build_or_load_dataset(config, progress_callback=lambda *values: updates.append(values))
+    assert updates == [(completed, 10) for completed in range(11)]
+    updates.clear()
+    build_or_load_dataset(config, progress_callback=lambda *values: updates.append(values))
+    assert updates == [(0, 10), (10, 10)]
