@@ -1,0 +1,10 @@
+extends:
+  - tabpfn35_ft_edaic_audio.yaml
+  - ../models/tabpfn35_ft_regressor.yaml
+
+experiment:
+  name: tabpfn35_ft_regression_edaic_audio_mean_std
+  task: regression
+
+evaluation:
+  threshold: null

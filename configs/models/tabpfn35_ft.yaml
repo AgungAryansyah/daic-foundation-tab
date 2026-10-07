@@ -1,0 +1,27 @@
+model:
+  name: tabpfn35_ft
+  model_version: v3.5
+  checkpoint_version: tabpfn-v3.5-20260909.safetensors
+  parameters:
+    epochs: 50
+    learning_rate: 0.00001
+    weight_decay: 0.01
+    grad_clip_value: 1.0
+    use_lr_scheduler: true
+    lr_warmup_only: false
+    n_estimators_finetune: 2
+    n_estimators_validation: 2
+    n_estimators_final_inference: 8
+    n_finetune_ctx_plus_query_samples: 10000
+    finetune_ctx_query_split_ratio: 0.2
+    n_inference_subsample_samples: null
+    early_stopping: true
+    early_stopping_patience: 10
+    validation_frequency: 1
+    min_delta: 0.0001
+    time_limit: null
+    save_checkpoint_interval: null
+    use_activation_checkpointing: true
+    eval_metric: roc_auc
+    device: cuda:0
+    random_state: 42

@@ -1,0 +1,10 @@
+extends:
+  - tabpfn35_ft_audio_complete_cohort.yaml
+  - ../models/tabpfn35_ft_regressor.yaml
+
+experiment:
+  name: tabpfn35_ft_regression_audio_complete_cohort_mean_std
+  task: regression
+
+evaluation:
+  threshold: null

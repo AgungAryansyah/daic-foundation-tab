@@ -1,0 +1,10 @@
+extends:
+  - tabpfn35_ft_edaic_audio_visual.yaml
+
+modalities:
+  audio:
+    enabled: false
+
+experiment:
+  name: tabpfn35_ft_binary_edaic_visual_mean_std
+  feature_set: visual
