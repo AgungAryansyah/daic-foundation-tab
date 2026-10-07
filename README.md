@@ -6,7 +6,7 @@ DAIC-WOZ is licensed sensitive data and is not included in this repository. Keep
 
 ## Remote environment
 
-Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.5.1 with CUDA 11.8, and an NVIDIA driver version 450.80.02 or later for CUDA 11.x minor-version compatibility. CPU fine-tuning is intentionally unsupported.
+Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.9.1 with CUDA 13.0, and an NVIDIA driver from the R580 series or newer. Linux driver 580.65.06 or newer is recommended for CUDA 13.0; see the [NVIDIA compatibility table](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver). The CUDA 13 wheel requires a supported NVIDIA GPU (Turing or newer) and glibc 2.28 or newer. CPU fine-tuning is intentionally unsupported.
 
 ```bash
 nvidia-smi
@@ -14,6 +14,8 @@ python --version
 uv sync --group dev --python 3.12
 uv run --python 3.12 python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
 ```
+
+The [official CUDA 13 PyTorch wheels](https://pytorch.org/get-started/previous-versions/#v2-9-1) supply the CUDA runtime through Python dependencies; installing a separate system CUDA toolkit is unnecessary for these experiments. `nvidia-smi` reports driver capability, while `torch.version.cuda` reports the runtime used by PyTorch. Resync an existing environment with `uv sync --group dev --python 3.12 --locked`.
 
 Every experiment requires `cuda:0`. The runner verifies CUDA before reading data, creating outputs, or initializing W&B, then records the selected device, CUDA runtime, GPU model, VRAM, and peak memory use.
 
@@ -184,7 +186,7 @@ The smoke presets skip bootstrap and repeated holdouts. Full presets run the sam
 
 ## TabPFN-3.5 experiments
 
-`tabpfn==9.1.0` is pinned alongside Python 3.12 and `torch==2.5.1+cu118`. The adapters explicitly use `ModelVersion.V3_5`, the full multitask checkpoint `tabpfn-v3.5-20260909.safetensors`, and native `FinetunedTabPFNClassifier` / `FinetunedTabPFNRegressor` training. TabPFN selects CUDA mixed precision automatically.
+`tabpfn==9.1.0` is pinned alongside Python 3.12 and `torch==2.9.1+cu130`. The adapters explicitly use `ModelVersion.V3_5`, the full multitask checkpoint `tabpfn-v3.5-20260909.safetensors`, and native `FinetunedTabPFNClassifier` / `FinetunedTabPFNRegressor` training. TabPFN selects CUDA mixed precision automatically.
 
 ### Model access and remote validation
 
@@ -194,7 +196,7 @@ Verify the remote checkout contains this integration, complete the CUDA/W&B setu
 
 ```bash
 uv sync --group dev --python 3.12 --locked
-uv run --no-sync python -c "import torch; from importlib.metadata import version; assert version('tabpfn') == '9.1.0'; assert torch.__version__ == '2.5.1+cu118'; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
+uv run --no-sync python -c "import torch; from importlib.metadata import version; assert version('tabpfn') == '9.1.0'; assert torch.__version__ == '2.9.1+cu130'; assert torch.version.cuda == '13.0'; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
 uv run --no-sync python -c "from dotenv import load_dotenv; load_dotenv('.env'); from tabpfn.browser_auth import ensure_license_accepted; ensure_license_accepted(hf_repo_id='tabpfn_3_5')"
 uv run --no-sync pytest -q
 uv run --no-sync ruff check src tests
