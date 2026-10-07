@@ -184,7 +184,7 @@ def _safe_model_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     return _redact_paths(
         {
             key: metadata[key]
-            for key in ("model_name", "package", "package_version", "checkpoint", "parameters")
+            for key in ("model_name", "package", "package_version", "model_version", "checkpoint", "parameters")
             if key in metadata
         }
     )
@@ -318,6 +318,11 @@ class WandbTracker:
             "selection_metric": metadata.get("selection_metric"),
             "best_validation_metric": metadata.get("best_validation_metric"),
             "checkpoint_sha256": metadata.get("checkpoint_sha256"),
+            **{
+                key: metadata[key]
+                for key in ("baseline_validation_metric", "selected_epoch")
+                if key in metadata
+            },
         }
         self.data_card["fine_tuning"] = _json_value(fine_tuning)
         self.results["fine_tuning"] = _json_value(fine_tuning)
@@ -327,6 +332,7 @@ class WandbTracker:
                 "feature_count_after_selection": feature_count,
                 "fit_seconds": fit_seconds,
                 "best_validation_metric": metadata.get("best_validation_metric"),
+                "selection_metric": metadata.get("selection_metric"),
             },
         )
 
@@ -398,7 +404,7 @@ class WandbTracker:
             artifact = self.sdk.Artifact(
                 name=f"research-record-{self.artifacts.path.name}",
                 type="research-record",
-                description="Sanitized cohort-level DAIC-WOZ fine-tuning record",
+                description="Sanitized participant-level fine-tuning record",
                 metadata={
                     "study_id": self.study_id,
                     "dataset_cache_key": self.data_card["dataset_cache_key"],

@@ -23,6 +23,7 @@ def environment_metadata(device: str) -> dict[str, Any]:
         "ram_bytes": psutil.virtual_memory().total,
         "torch_version": _version("torch"),
         "tabicl_version": _version("tabicl"),
+        "tabpfn_version": _version("tabpfn"),
         "cuda_version": None,
         "cuda_device": device,
         "gpu_name": None,

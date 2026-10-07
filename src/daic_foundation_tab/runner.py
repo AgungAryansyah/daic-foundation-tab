@@ -26,7 +26,7 @@ from daic_foundation_tab.models import create_model
 from daic_foundation_tab.models.base import FineTunableClassifier
 from daic_foundation_tab.tracking.artifacts import RunArtifacts
 from daic_foundation_tab.tracking.environment import environment_metadata
-from daic_foundation_tab.tracking.logging import configure_run_logger
+from daic_foundation_tab.tracking.logging import configure_run_logger, log_progress, phase
 from daic_foundation_tab.tracking.runtime import (
     cuda_peak_memory,
     require_cuda_device,
@@ -66,7 +66,7 @@ def _summary(
     train = validation["split_statistics"]["train"]
     dev = validation["split_statistics"]["dev"]
     lines = [
-        "# TabICLv2-FT DAIC-WOZ Result",
+        f"# {model_metadata['model_name']} Classification Result",
         "",
         "## Dataset",
         f"Train participants: {train['participants']}",
@@ -89,7 +89,7 @@ def _summary(
         f"Total runtime (s): {runtime['total_seconds']:.2f}",
         "",
         "## Limitations",
-        "- TabICLv2-FT is being evaluated in an extreme small-sample regime.",
+        "- This model is being evaluated in an extreme small-sample regime.",
         "- Fine-tuning is a feasibility result, not a superiority or clinical-use claim.",
     ]
     if bootstrap_summary is not None:
@@ -127,19 +127,9 @@ def run_experiment(config: dict[str, Any]) -> Path:
     started = time.perf_counter()
     seed = int(config["project"]["seed"])
     set_global_seed(seed)
-    dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
     feature_set = config["experiment"]["feature_set"]
-    validation = validate_dataset(
-        dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
-    )
     threshold = float(config["evaluation"]["threshold"])
     fine_tuning_config = config["evaluation"]["fine_tuning"]
-    prepared = prepare_fine_tune_splits(
-        dataset,
-        feature_set,
-        float(fine_tuning_config["validation_fraction"]),
-        int(fine_tuning_config["validation_seed"]),
-    )
     artifacts = RunArtifacts(
         config["project"]["output_root"],
         config["model"]["name"],
@@ -152,6 +142,17 @@ def run_experiment(config: dict[str, Any]) -> Path:
     logger.info("dataset_root=%s", config["data"]["root"])
     logger.info("feature_set=%s", feature_set)
     logger.info("seed=%s", seed)
+    with phase(logger, "preparing features"):
+        dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
+        validation = validate_dataset(
+            dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
+        )
+        prepared = prepare_fine_tune_splits(
+            dataset,
+            feature_set,
+            float(fine_tuning_config["validation_fraction"]),
+            int(fine_tuning_config["validation_seed"]),
+        )
     logger.info("participants train=%s dev=%s test=%s", *(validation["split_statistics"][split]["participants"] for split in ("train", "dev", "test")))
     logger.info("feature_count=%s", len(prepared.selection.columns))
     write_config(config, artifacts.path / "config_resolved.yaml")
@@ -160,7 +161,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
         "git_commit": _git_commit(),
         "random_seeds": {
             "project": seed,
-            "tabicl": config["model"]["parameters"].get("random_state"),
+            "tabpfn" if config["model"]["name"].startswith("tabpfn") else "tabicl": config["model"]["parameters"].get("random_state"),
             "bootstrap": config["bootstrap"].get("random_state"),
             "fine_tuning_validation": fine_tuning_config["validation_seed"],
             "repeated_holdout_start": config["evaluation"]["repeated_holdout"].get("seed_start"),
@@ -188,15 +189,24 @@ def run_experiment(config: dict[str, Any]) -> Path:
         reset_cuda_peak_memory(device)
         model = _model_for_seed(config["model"], seed)
         logger.info("model=%s checkpoint=%s device=%s", config["model"]["name"], config["model"]["checkpoint_version"], device)
-        _, fit_seconds = timed_call(
-            model.fit,
-            prepared.training_x,
-            prepared.training_y,
-            validation_features=prepared.validation_x,
-            validation_target=prepared.validation_y,
-            checkpoint_directory=artifacts.path / "checkpoints",
-            epoch_callback=tracker.record_fine_tuning_epoch,
-        )
+        epochs = int(config["model"]["parameters"].get("epochs", 50))
+        with phase(logger, "training") as phase_started:
+
+            def epoch_callback(metrics: dict[str, float]) -> None:
+                tracker.record_fine_tuning_epoch(metrics)
+                epoch = metrics.get("train/epoch")
+                if isinstance(epoch, (int, float)):
+                    log_progress(logger, "training", min(int(epoch) + 1, epochs), epochs, phase_started)
+
+            _, fit_seconds = timed_call(
+                model.fit,
+                prepared.training_x,
+                prepared.training_y,
+                validation_features=prepared.validation_x,
+                validation_target=prepared.validation_y,
+                checkpoint_directory=artifacts.path / "checkpoints",
+                epoch_callback=epoch_callback,
+            )
         finetune_metadata = model.finetune_metadata()
         tracker.record_fine_tuning(
             prepared.training_y,
@@ -205,68 +215,74 @@ def run_experiment(config: dict[str, Any]) -> Path:
             fit_seconds,
             finetune_metadata,
         )
-        probability, predict_seconds = timed_call(_positive_probability, model, prepared.dev_x)
-        prediction = (probability > threshold).astype(int)
-        metrics = classification_metrics(prepared.dev_y, prediction, probability)
-        tracker.record_development(metrics)
-        logger.info("development macro_f1=%s balanced_accuracy=%s", metrics["macro_f1"], metrics["balanced_accuracy"])
-        dev_ids = dataset.table.loc[dataset.table["split"] == "dev", "participant_id"]
-        predictions = classification_predictions(dev_ids, "dev", prediction, probability, prepared.dev_y)
-        artifacts.csv("predictions_dev.csv", predictions)
-        artifacts.json("finetune_metadata.json", finetune_metadata)
-        artifacts.json("metrics_dev.json", metrics)
-        artifacts.csv(
-            "metrics_dev.csv",
-            pd.DataFrame([{key: value for key, value in metrics.items() if isinstance(value, float)}]),
-        )
+        with phase(logger, "evaluating development"):
+            probability, predict_seconds = timed_call(_positive_probability, model, prepared.dev_x)
+            prediction = (probability > threshold).astype(int)
+            metrics = classification_metrics(prepared.dev_y, prediction, probability)
+            tracker.record_development(metrics)
+            logger.info("development macro_f1=%s balanced_accuracy=%s", metrics["macro_f1"], metrics["balanced_accuracy"])
+            dev_ids = dataset.table.loc[dataset.table["split"] == "dev", "participant_id"]
+            predictions = classification_predictions(dev_ids, "dev", prediction, probability, prepared.dev_y)
+            artifacts.csv("predictions_dev.csv", predictions)
+            artifacts.json("finetune_metadata.json", finetune_metadata)
+            artifacts.json("metrics_dev.json", metrics)
+            artifacts.csv(
+                "metrics_dev.csv",
+                pd.DataFrame([{key: value for key, value in metrics.items() if isinstance(value, float)}]),
+            )
 
         test_metrics = None
         if config["evaluation"].get("test_predictions", False):
-            logger.info("generating official test predictions")
-            test_probability, test_predict_seconds = timed_call(
-                _positive_probability, model, prepared.test_x
-            )
-            test_prediction = (test_probability > threshold).astype(int)
-            test_ids = dataset.table.loc[dataset.table["split"] == "test", "participant_id"]
-            ground_truth_path = config["data"].get("test_ground_truth")
-            test_target = None
-            if ground_truth_path:
-                label_path = Path(config["data"]["root"]).expanduser().resolve() / ground_truth_path
-                if label_path.is_file():
-                    test_target = load_test_ground_truth(label_path, test_ids)
-                    test_metrics = classification_metrics(test_target, test_prediction, test_probability)
-                    artifacts.json("metrics_test.json", test_metrics)
-                    artifacts.json("decision_threshold.json", {"threshold": threshold})
-                    artifacts.csv(
-                        "metrics_test.csv",
-                        pd.DataFrame([{key: value for key, value in test_metrics.items() if isinstance(value, float)}]),
-                    )
-                    collect_test_evaluations(artifacts.path.parent)
-                    tracker.record_test(test_metrics)
-                    logger.info(
-                        "test macro_f1=%s balanced_accuracy=%s",
-                        test_metrics["macro_f1"],
-                        test_metrics["balanced_accuracy"],
-                    )
-                else:
-                    logger.warning("test ground truth unavailable at %s; skipping test metrics", label_path)
-            test_predictions = classification_predictions(
-                test_ids, "test", test_prediction, test_probability, test_target
-            )
-            artifacts.csv("predictions_test.csv", test_predictions)
-            predict_seconds += test_predict_seconds
-            logger.info("saved official test predictions for %s participants", len(test_predictions))
+            with phase(logger, "evaluating test"):
+                logger.info("generating official test predictions")
+                test_probability, test_predict_seconds = timed_call(
+                    _positive_probability, model, prepared.test_x
+                )
+                test_prediction = (test_probability > threshold).astype(int)
+                test_ids = dataset.table.loc[dataset.table["split"] == "test", "participant_id"]
+                ground_truth_path = config["data"].get("test_ground_truth")
+                test_target = None
+                if ground_truth_path:
+                    label_path = Path(config["data"]["root"]).expanduser().resolve() / ground_truth_path
+                    if label_path.is_file():
+                        test_target = load_test_ground_truth(label_path, test_ids)
+                        test_metrics = classification_metrics(test_target, test_prediction, test_probability)
+                        artifacts.json("metrics_test.json", test_metrics)
+                        artifacts.json("decision_threshold.json", {"threshold": threshold})
+                        artifacts.csv(
+                            "metrics_test.csv",
+                            pd.DataFrame([{key: value for key, value in test_metrics.items() if isinstance(value, float)}]),
+                        )
+                        collect_test_evaluations(artifacts.path.parent)
+                        tracker.record_test(test_metrics)
+                        logger.info(
+                            "test macro_f1=%s balanced_accuracy=%s",
+                            test_metrics["macro_f1"],
+                            test_metrics["balanced_accuracy"],
+                        )
+                    else:
+                        logger.warning("test ground truth unavailable at %s; skipping test metrics", label_path)
+                test_predictions = classification_predictions(
+                    test_ids, "test", test_prediction, test_probability, test_target
+                )
+                artifacts.csv("predictions_test.csv", test_predictions)
+                predict_seconds += test_predict_seconds
+                logger.info("saved official test predictions for %s participants", len(test_predictions))
 
         bootstrap_summary = None
         if config["bootstrap"].get("enabled", False):
-            bootstrap_distribution, bootstrap_summary = bootstrap_metrics(
-                prepared.dev_y,
-                prediction,
-                probability,
-                int(config["bootstrap"]["iterations"]),
-                float(config["bootstrap"]["confidence"]),
-                int(config["bootstrap"]["random_state"]),
-            )
+            with phase(logger, "bootstrapping development") as phase_started:
+                bootstrap_distribution, bootstrap_summary = bootstrap_metrics(
+                    prepared.dev_y,
+                    prediction,
+                    probability,
+                    int(config["bootstrap"]["iterations"]),
+                    float(config["bootstrap"]["confidence"]),
+                    int(config["bootstrap"]["random_state"]),
+                    progress_callback=lambda completed, total: log_progress(
+                        logger, "bootstrapping development", completed, total, phase_started
+                    ),
+                )
             artifacts.csv("bootstrap_dev.csv", bootstrap_distribution)
             artifacts.json("bootstrap_dev_summary.json", bootstrap_summary)
             tracker.record_bootstrap(bootstrap_summary)
@@ -274,19 +290,23 @@ def run_experiment(config: dict[str, Any]) -> Path:
         repeated_summary = None
         repeated_config = config["evaluation"]["repeated_holdout"]
         if repeated_config.get("enabled", False):
-            train_x, train_y = dataset.get_split("train", feature_set)
-            train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"]
-            repeated_metrics, assignments = repeated_fine_tune_holdout(
-                train_x,
-                train_y.astype(int),
-                train_ids,
-                int(repeated_config["repeats"]),
-                float(repeated_config["validation_fraction"]),
-                float(fine_tuning_config["validation_fraction"]),
-                int(repeated_config["seed_start"]),
-                lambda repeat_seed: _model_for_seed(config["model"], repeat_seed),
-                threshold=threshold,
-            )
+            with phase(logger, "repeated holdout") as phase_started:
+                train_x, train_y = dataset.get_split("train", feature_set)
+                train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"]
+                repeated_metrics, assignments = repeated_fine_tune_holdout(
+                    train_x,
+                    train_y.astype(int),
+                    train_ids,
+                    int(repeated_config["repeats"]),
+                    float(repeated_config["validation_fraction"]),
+                    float(fine_tuning_config["validation_fraction"]),
+                    int(repeated_config["seed_start"]),
+                    lambda repeat_seed: _model_for_seed(config["model"], repeat_seed),
+                    threshold=threshold,
+                    progress_callback=lambda completed, total: log_progress(
+                        logger, "repeated holdout", completed, total, phase_started
+                    ),
+                )
             repeated_summary = repeated_fine_tune_summary(repeated_metrics)
             artifacts.csv("repeated_holdout_metrics.csv", repeated_metrics)
             artifacts.json("repeated_holdout_summary.json", repeated_summary)

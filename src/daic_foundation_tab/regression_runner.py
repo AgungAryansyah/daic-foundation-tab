@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import logging
 import time
-from contextlib import contextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Event, Thread
 from typing import Any
 
 import numpy as np
@@ -29,7 +26,7 @@ from daic_foundation_tab.evaluation.regression_splits import (
 from daic_foundation_tab.models import create_model
 from daic_foundation_tab.tracking.artifacts import RunArtifacts
 from daic_foundation_tab.tracking.environment import environment_metadata
-from daic_foundation_tab.tracking.logging import configure_run_logger
+from daic_foundation_tab.tracking.logging import configure_run_logger, log_progress, phase
 from daic_foundation_tab.tracking.runtime import (
     cuda_peak_memory,
     require_cuda_device,
@@ -39,52 +36,6 @@ from daic_foundation_tab.tracking.runtime import (
 from daic_foundation_tab.tracking.seeds import set_global_seed
 from daic_foundation_tab.tracking.test_evaluations import collect_regression_test_evaluations
 from daic_foundation_tab.tracking.wandb import WandbTracker
-
-
-@contextmanager
-def _phase(logger: logging.Logger, name: str):
-    started = time.perf_counter()
-    stopped = Event()
-    logger.info("phase=%s status=started elapsed=0s ETA unavailable", name)
-
-    def heartbeat() -> None:
-        while not stopped.wait(30):
-            logger.info(
-                "phase=%s status=running elapsed=%.1fs ETA unavailable",
-                name,
-                time.perf_counter() - started,
-            )
-
-    thread = Thread(target=heartbeat, daemon=True)
-    thread.start()
-    try:
-        yield started
-    except Exception:
-        logger.exception(
-            "phase=%s status=failed elapsed=%.1fs", name, time.perf_counter() - started
-        )
-        raise
-    else:
-        logger.info("phase=%s status=complete elapsed=%.1fs", name, time.perf_counter() - started)
-    finally:
-        stopped.set()
-        thread.join()
-
-
-def _log_progress(
-    logger: logging.Logger, phase: str, completed: int, total: int, started: float
-) -> None:
-    elapsed = time.perf_counter() - started
-    eta = elapsed * (total - completed) / completed if completed else None
-    logger.info(
-        "phase=%s progress=%s/%s (%.1f%%) elapsed=%.1fs ETA=%s",
-        phase,
-        completed,
-        total,
-        100 * completed / total,
-        elapsed,
-        f"{eta:.1f}s" if eta is not None else "unavailable",
-    )
 
 
 def _model_for_seed(model_config: dict[str, Any], seed: int):
@@ -105,7 +56,7 @@ def _summary(
     train = validation["split_statistics"]["train"]
     dev = validation["split_statistics"]["dev"]
     lines = [
-        "# TabICLv2-FT PHQ-8 Regression Result",
+        f"# {model_metadata['model_name']} PHQ-8 Regression Result",
         "",
         "## Dataset",
         f"Train participants: {train['participants']}",
@@ -166,7 +117,7 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         "run_id=%s task=regression seed=%s feature_set=%s", artifacts.path.name, seed, feature_set
     )
 
-    with _phase(logger, "preparing features"):
+    with phase(logger, "preparing features"):
         dataset, feature_build_seconds = timed_call(build_or_load_dataset, config)
         validation = validate_regression_dataset(
             dataset, feature_set, float(config["data"].get("max_exclusion_fraction", 0.05))
@@ -194,7 +145,7 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         "git_commit": _git_commit(),
         "random_seeds": {
             "project": seed,
-            "tabicl": config["model"]["parameters"].get("random_state"),
+            "tabpfn" if config["model"]["name"].startswith("tabpfn") else "tabicl": config["model"]["parameters"].get("random_state"),
             "bootstrap": config["bootstrap"].get("random_state"),
             "fine_tuning_validation": fine_tuning_config["validation_seed"],
             "repeated_holdout_start": config["evaluation"]["repeated_holdout"].get("seed_start"),
@@ -228,13 +179,13 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         reset_cuda_peak_memory(device)
         model = _model_for_seed(config["model"], seed)
         epochs = int(config["model"]["parameters"]["epochs"])
-        with _phase(logger, "training") as phase_started:
+        with phase(logger, "training") as phase_started:
 
             def epoch_callback(metrics: dict[str, float]) -> None:
                 tracker.record_fine_tuning_epoch(metrics)
                 epoch = metrics.get("train/epoch")
                 if isinstance(epoch, (int, float)):
-                    _log_progress(
+                    log_progress(
                         logger, "training", min(int(epoch) + 1, epochs), epochs, phase_started
                     )
 
@@ -257,7 +208,7 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         )
         artifacts.json("finetune_metadata.json", finetune_metadata)
 
-        with _phase(logger, "evaluating development"):
+        with phase(logger, "evaluating development"):
             prediction, predict_seconds = timed_call(model.predict, prepared.dev_x)
             prediction = np.asarray(prediction, dtype=float)
             dev_metrics = regression_metrics(prepared.dev_y, prediction)
@@ -278,7 +229,7 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
 
         test_metrics = None
         if config["evaluation"].get("test_predictions", False):
-            with _phase(logger, "evaluating test"):
+            with phase(logger, "evaluating test"):
                 test_prediction, test_predict_seconds = timed_call(model.predict, prepared.test_x)
                 test_prediction = np.asarray(test_prediction, dtype=float)
                 test_ids = dataset.table.loc[dataset.table["split"] == "test", "participant_id"]
@@ -322,14 +273,14 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
 
         bootstrap_summary = None
         if config["bootstrap"].get("enabled", False):
-            with _phase(logger, "bootstrapping development") as phase_started:
+            with phase(logger, "bootstrapping development") as phase_started:
                 bootstrap_distribution, bootstrap_summary = bootstrap_regression_metrics(
                     prepared.dev_y,
                     prediction,
                     int(config["bootstrap"]["iterations"]),
                     float(config["bootstrap"]["confidence"]),
                     int(config["bootstrap"]["random_state"]),
-                    progress_callback=lambda completed, total: _log_progress(
+                    progress_callback=lambda completed, total: log_progress(
                         logger, "bootstrapping development", completed, total, phase_started
                     ),
                 )
@@ -340,7 +291,7 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         repeated_summary = None
         repeated_config = config["evaluation"]["repeated_holdout"]
         if repeated_config.get("enabled", False):
-            with _phase(logger, "repeated holdout") as phase_started:
+            with phase(logger, "repeated holdout") as phase_started:
                 train_x, train_y = dataset.get_split("train", feature_set, target="phq8")
                 train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"]
                 repeated_metrics, assignments = repeated_regression_holdout(
@@ -352,7 +303,7 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
                     float(fine_tuning_config["validation_fraction"]),
                     int(repeated_config["seed_start"]),
                     lambda repeat_seed: _model_for_seed(config["model"], repeat_seed),
-                    progress_callback=lambda completed, total: _log_progress(
+                    progress_callback=lambda completed, total: log_progress(
                         logger, "repeated holdout", completed, total, phase_started
                     ),
                 )

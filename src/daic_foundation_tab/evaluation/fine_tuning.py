@@ -113,10 +113,11 @@ def repeated_fine_tune_holdout(
     model_factory: Callable[[int], FineTunableClassifier],
     *,
     threshold: float = 0.5,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> tuple[pd.DataFrame, dict[int, pd.DataFrame]]:
     rows: list[dict[str, float | int]] = []
     assignments: dict[int, pd.DataFrame] = {}
-    for seed in range(seed_start, seed_start + repeats):
+    for completed, seed in enumerate(range(seed_start, seed_start + repeats), start=1):
         outer = stratified_fine_tune_partition(
             target,
             participant_ids,
@@ -157,6 +158,8 @@ def repeated_fine_tune_holdout(
         evaluation_assignment = outer.assignment.loc[outer.assignment["role"] == "evaluation"].copy()
         evaluation_assignment["outer_seed"] = seed
         assignments[seed] = pd.concat([inner_assignment, evaluation_assignment], ignore_index=True)
+        if progress_callback is not None:
+            progress_callback(completed, repeats)
     return pd.DataFrame(rows), assignments
 
 
