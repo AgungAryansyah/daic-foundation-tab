@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",
     "scikit-learn>=1.5",
     "scipy>=1.13",
+    "structured-data-models",
     "tabicl[finetune]",
     "tabpfn==9.1.0",
     "torch==2.9.1+cu130",
@@ -46,6 +47,7 @@ line-length = 100
 target-version = "py312"
 
 [tool.uv.sources]
+structured-data-models = { git = "https://github.com/NVIDIA/structured-data-models.git", rev = "842c408fe2a8711bdf2e7cff4bfbe54266d6b940" }
 torch = { index = "pytorch-cu130" }
 
 [[tool.uv.index]]

@@ -159,6 +159,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scikit-learn" },
     { name = "scipy" },
+    { name = "structured-data-models" },
     { name = "tabicl", extra = ["finetune"] },
     { name = "tabpfn" },
     { name = "torch" },
@@ -181,6 +182,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
     { name = "scipy", specifier = ">=1.13" },
+    { name = "structured-data-models", git = "https://github.com/NVIDIA/structured-data-models.git?rev=842c408fe2a8711bdf2e7cff4bfbe54266d6b940" },
     { name = "tabicl", extras = ["finetune"] },
     { name = "tabpfn", specifier = "==9.1.0" },
     { name = "torch", specifier = "==2.9.1+cu130", index = "https://download.pytorch.org/whl/cu130" },
@@ -1150,6 +1152,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a3/a6/f4d0b7240ebf546d3a77f212958b930282cccb0a53d66b9b0e1639ce8230/skrub-0.10.1.tar.gz", hash = "sha256:39f58492f6889c5563a654478cd523771aaa8dab5a42ad2ce9f430efb3881f53", size = 4205317, upload-time = "2026-09-01T09:33:37.146Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0e/2d/492a8b0d0d8b344918312a6416c537e54081ca5d0aaf19d085a188905e41/skrub-0.10.1-py3-none-any.whl", hash = "sha256:553c6f9b19a2cb97bba776a28255e7e024e77d4f50d7c6c70b4805f4e668a3cc", size = 595919, upload-time = "2026-09-01T09:33:35.208Z" },
+]
+
+[[package]]
+name = "structured-data-models"
+version = "0.2.0rc1"
+source = { git = "https://github.com/NVIDIA/structured-data-models.git?rev=842c408fe2a8711bdf2e7cff4bfbe54266d6b940#842c408fe2a8711bdf2e7cff4bfbe54266d6b940" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "pyarrow" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "typing-extensions" },
 ]
 
 [[package]]
