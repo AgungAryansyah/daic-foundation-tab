@@ -184,7 +184,7 @@ def _safe_model_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     return _redact_paths(
         {
             key: metadata[key]
-            for key in ("model_name", "package", "package_version", "model_version", "checkpoint", "parameters")
+            for key in ("model_name", "package", "package_version", "package_revision", "model_version", "checkpoint", "checkpoint_revision", "model_repository", "size", "parameters")
             if key in metadata
         }
     )
@@ -320,7 +320,7 @@ class WandbTracker:
             "checkpoint_sha256": metadata.get("checkpoint_sha256"),
             **{
                 key: metadata[key]
-                for key in ("baseline_validation_metric", "selected_epoch")
+                for key in ("baseline_validation_metric", "selected_epoch", "epochs_completed", "optimizer_steps", "source_checkpoint_sha256")
                 if key in metadata
             },
         }

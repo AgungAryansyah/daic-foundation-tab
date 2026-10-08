@@ -166,7 +166,7 @@ def run_experiment(config: dict[str, Any]) -> Path:
         "git_commit": _git_commit(),
         "random_seeds": {
             "project": seed,
-            "tabpfn" if config["model"]["name"].startswith("tabpfn") else "tabicl": config["model"]["parameters"].get("random_state"),
+            config["model"]["name"].split("_", 1)[0].removesuffix("v2").removesuffix("35"): config["model"]["parameters"].get("random_state"),
             "bootstrap": config["bootstrap"].get("random_state"),
             "fine_tuning_validation": fine_tuning_config["validation_seed"],
             "repeated_holdout_start": config["evaluation"]["repeated_holdout"].get("seed_start"),

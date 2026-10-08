@@ -1,0 +1,24 @@
+model:
+  name: kumo_medium_ft
+  size: medium
+  model_version: v1.0.1
+  package_revision: 842c408fe2a8711bdf2e7cff4bfbe54266d6b940
+  checkpoint_revision: 3c3e10bbdb590ace29e7026847f92db3c603096d
+  checkpoint_version: medium/classifier.pt
+  parameters:
+    epochs: 50
+    learning_rate: 0.00001
+    weight_decay: 0.01
+    grad_clip: 1.0
+    amp: true
+    warmup_proportion: 0.1
+    n_estimators_finetune: 2
+    n_estimators_validation: 2
+    n_estimators_inference: 8
+    max_data_size: 10000
+    finetune_ctx_query_ratio: 0.2
+    patience: 10
+    min_delta: 0.0001
+    eval_metric: roc_auc
+    device: cuda:0
+    random_state: 42

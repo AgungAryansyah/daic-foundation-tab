@@ -76,13 +76,14 @@ def validate_config(config: Mapping[str, Any]) -> None:
     if model_name == "tabiclv2":
         raise ConfigError("Only tabiclv2_ft is supported; the standalone tabiclv2 ICL path was retired")
     expected_models = (
-        ("tabiclv2_ft", "tabpfn35_ft")
+        ("tabiclv2_ft", "tabpfn35_ft", "kumo_medium_ft")
         if task == "classification"
-        else ("tabiclv2_ft_regressor", "tabpfn35_ft_regressor")
+        else ("tabiclv2_ft_regressor", "tabpfn35_ft_regressor", "kumo_medium_ft_regressor")
     )
     if model_name not in expected_models:
         raise ConfigError(f"{task} requires model.name to be {' or '.join(expected_models)}")
     is_tabpfn = model_name.startswith("tabpfn35")
+    is_kumo = model_name.startswith("kumo_medium")
     if is_tabpfn and config["model"].get("model_version") != "v3.5":
         raise ConfigError("TabPFN-3.5 requires model.model_version to be v3.5")
     runtime = config["runtime"]
@@ -95,6 +96,13 @@ def validate_config(config: Mapping[str, Any]) -> None:
     parameters = config["model"].get("parameters")
     if not isinstance(parameters, Mapping):
         raise ConfigError("model.parameters must be a mapping")
+    if is_kumo:
+        from daic_foundation_tab.models.kumo_medium_ft import validate_kumo_config
+
+        try:
+            validate_kumo_config(config["model"])
+        except ValueError as error:
+            raise ConfigError(str(error)) from error
     if parameters.get("device") != runtime["device"]:
         raise ConfigError("model.parameters.device must match runtime.device")
     if not is_tabpfn and parameters.get("amp") is not True:
@@ -109,8 +117,8 @@ def validate_config(config: Mapping[str, Any]) -> None:
             or not 0 <= threshold <= 1
         ):
             raise ConfigError("evaluation.threshold must be between zero and one")
-    elif parameters.get("eval_metric") != ("mse" if is_tabpfn else "mae"):
-        metric = "mse" if is_tabpfn else "mae"
+    elif parameters.get("eval_metric") != ("mse" if is_tabpfn or is_kumo else "mae"):
+        metric = "mse" if is_tabpfn or is_kumo else "mae"
         raise ConfigError(f"Regression fine-tuning requires model.parameters.eval_metric to be {metric}")
     elif config["evaluation"].get("threshold") is not None:
         raise ConfigError("Regression does not use evaluation.threshold; set it to null")

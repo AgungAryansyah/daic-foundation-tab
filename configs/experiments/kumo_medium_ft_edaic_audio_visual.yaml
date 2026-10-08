@@ -1,0 +1,34 @@
+extends:
+  - ../base.yaml
+  - ../models/kumo_medium_ft.yaml
+
+data:
+  root: data/edaic
+  labels:
+    train: original_labels/train_split.csv
+    dev: original_labels/dev_split.csv
+    test: original_labels/test_split.csv
+  test_ground_truth: original_labels/test_split.csv
+  expected_counts:
+    train: 163
+    dev: 56
+    test: 56
+  source_groups:
+    opensmile_egemaps:
+      modality: audio
+      parser: csv
+      pattern: data/{participant_id}_OpenSMILE2.3.0_egemaps.csv
+    openface_21:
+      modality: visual
+      parser: openface
+      pattern: data/{participant_id}_OpenFace2.1.0_Pose_gaze_AUs.csv
+
+modalities:
+  audio:
+    groups: [opensmile_egemaps]
+  visual:
+    groups: [openface_21]
+
+experiment:
+  name: kumo_medium_ft_binary_edaic_audio_visual_mean_std
+  feature_set: audio_visual
