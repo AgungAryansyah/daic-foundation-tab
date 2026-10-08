@@ -35,9 +35,11 @@ def verify_run(output: Path, config: dict) -> None:
     if yaml.safe_load((output / "config_resolved.yaml").read_text()) != _settings(config):
         raise ValueError("Saved configuration differs from the current preset")
     metadata = saved("finetune_metadata.json")
+    is_kumo = config["model"]["name"].startswith("kumo_medium")
     checkpoint = Path(metadata["checkpoint_path"]).resolve()
-    if not checkpoint.is_relative_to(output.resolve()) or checkpoint.suffix != ".pth":
-        raise ValueError("Selected checkpoint must be a native .pth file inside the run")
+    suffix = ".pt" if is_kumo else ".pth"
+    if not checkpoint.is_relative_to(output.resolve()) or checkpoint.suffix != suffix:
+        raise ValueError(f"Selected checkpoint must be a {suffix} file inside the run")
     with checkpoint.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     if digest != metadata["checkpoint_sha256"]:
@@ -48,7 +50,22 @@ def verify_run(output: Path, config: dict) -> None:
     ):
         raise ValueError("Selected validation metric is invalid")
     model = saved("model.json")
-    if model["model_version"] != "v3.5" or model["package_version"] != "9.1.0":
+    if is_kumo:
+        if (
+            model["package"] != "structured-data-models"
+            or model["package_version"] != "0.2.0rc1"
+            or model["size"] != "medium"
+            or any(model[key] != config["model"][key] for key in ("model_version", "package_revision", "checkpoint_revision"))
+            or model["checkpoint"] != config["model"]["checkpoint_version"]
+        ):
+            raise ValueError("Unexpected Kumo model or package revision")
+        if not 0 <= metadata["selected_epoch"] <= metadata["epochs_completed"] <= config["model"]["parameters"]["epochs"] or metadata["optimizer_steps"] < 1:
+            raise ValueError("Kumo fine-tuning did not complete valid optimizer steps")
+        if not math.isfinite(metadata["baseline_validation_metric"]):
+            raise ValueError("Kumo baseline validation metric is invalid")
+        if len(metadata["source_checkpoint_sha256"]) != 64:
+            raise ValueError("Kumo source checkpoint hash is invalid")
+    elif model["model_version"] != "v3.5" or model["package_version"] != "9.1.0":
         raise ValueError("Unexpected TabPFN model or package version")
     if saved("runtime.json")["device"] != "cuda:0":
         raise ValueError("Run did not use cuda:0")
@@ -125,16 +142,21 @@ def _launch(preset, progress_callback):
 
 def run_matrix(
     config_directory=Path("configs/experiments"),
-    status_path=Path("outputs/tabpfn35_matrix_status.json"),
+    status_path=None,
     *,
     verify_only=False,
+    model_family="tabpfn35",
 ):
+    if model_family not in {"tabpfn35", "kumo_medium"}:
+        raise ValueError("model_family must be tabpfn35 or kumo_medium")
+    status_path = Path(status_path) if status_path is not None else Path(f"outputs/{model_family}_matrix_status.json")
+    smoke_count, full_count = (2, 6) if model_family == "kumo_medium" else (4, 12)
     presets = sorted(
-        config_directory.glob("tabpfn35_ft_*.yaml"),
+        config_directory.glob(f"{model_family}_ft_*.yaml"),
         key=lambda path: (not path.stem.endswith("_smoke"), path.name),
     )
-    if len(presets) != 16 or sum(path.stem.endswith("_smoke") for path in presets) != 4:
-        raise ValueError("The matrix requires four smoke and twelve full presets")
+    if len(presets) != smoke_count + full_count or sum(path.stem.endswith("_smoke") for path in presets) != smoke_count:
+        raise ValueError(f"The matrix requires {smoke_count} smoke and {full_count} full presets")
     configs = {preset.name: load_config(preset) for preset in presets}
     if not verify_only:
         require_cuda_device("cuda:0")
@@ -147,7 +169,7 @@ def run_matrix(
         failures = []
         outputs = {}
         for completed, preset in enumerate(presets):
-            if completed == 4 and failures and not verify_only:
+            if completed == smoke_count and failures and not verify_only:
                 raise RuntimeError("Smoke verification failed; full experiments were not started")
             config = configs[preset.name]
             attempts = state["presets"].setdefault(preset.name, [])
@@ -239,7 +261,8 @@ def run_matrix(
                 if not expected.issubset(set(table["run"])):
                     raise ValueError("Aggregate test results are incomplete")
         logger.info(
-            "phase=matrix status=complete progress=16/16 presets (100%%) elapsed=%.1fs",
+            "phase=matrix status=complete progress=%s/%s presets (100%%) elapsed=%.1fs",
+            len(presets), len(presets),
             time.perf_counter() - started,
         )
         return status_path
@@ -247,11 +270,12 @@ def run_matrix(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run and resume the TabPFN-3.5 smoke and full matrix"
+        description="Run and resume a foundation-model smoke and full matrix"
     )
     parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--model-family", choices=("tabpfn35", "kumo_medium"), default="tabpfn35")
     args = parser.parse_args()
-    print(run_matrix(verify_only=args.verify_only))
+    print(run_matrix(verify_only=args.verify_only, model_family=args.model_family))
 
 
 if __name__ == "__main__":

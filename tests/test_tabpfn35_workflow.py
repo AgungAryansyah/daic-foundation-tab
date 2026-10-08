@@ -13,12 +13,14 @@ from daic_foundation_tab.config import load_config, validate_config
 from daic_foundation_tab.matrix import verify_run
 
 from .helpers import write_synthetic_dataset
+from .test_kumo_medium_adapter import install_toy
 from .test_tabpfn35_adapter import _install_fine_tuner
 from .test_wandb_tracking import _FakeWandb
 
 
 @pytest.mark.parametrize("task", ["classification", "regression"])
-def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp_path, task):
+@pytest.mark.parametrize("family", ["tabpfn35", "kumo_medium"])
+def test_foundation_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp_path, task, family):
     root = tmp_path / "data"
     config = write_synthetic_dataset(root)
     labels = pd.read_csv(root / "original_labels/train.csv")
@@ -30,7 +32,8 @@ def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp
         for source in (root / "data").glob("300_*"):
             shutil.copyfile(source, source.with_name(source.name.replace("300", str(participant))))
     suffix = "regression_" if task == "regression" else ""
-    preset = Path("configs/experiments") / f"tabpfn35_ft_{suffix}audio_visual_complete_cohort.yaml"
+    dataset_preset = "edaic_audio_visual" if family == "kumo_medium" else "audio_visual_complete_cohort"
+    preset = Path("configs/experiments") / f"{family}_ft_{suffix}{dataset_preset}.yaml"
     config["model"] = load_config(preset)["model"]
     config["model"]["parameters"]["epochs"] = 2
     config["experiment"]["task"] = task
@@ -47,9 +50,11 @@ def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp
         root / config["data"]["test_ground_truth"], index=False
     )
     validate_config(config)
-    instances, exports = _install_fine_tuner(
-        monkeypatch, [3.0, 2.0, 2.5] if task == "regression" else [0.75, 0.8, 0.76]
-    )
+    metrics = [3.0, 2.0, 2.5] if task == "regression" else [0.75, 0.8, 0.76]
+    if family == "kumo_medium":
+        instances = install_toy(monkeypatch, tmp_path, metrics)
+    else:
+        instances, exports = _install_fine_tuner(monkeypatch, metrics)
     fake = _FakeWandb()
     starts = []
     original_init = fake.init
@@ -74,17 +79,25 @@ def test_tabpfn_workflow_reuses_tracking_outputs_and_collectors(monkeypatch, tmp
 
     assert len(starts) == 1
     assert fake.run.finished == [0]
-    assert len(instances) == len(exports) == 3
-    assert [item.parameters["random_state"] for item in instances] == [42, 0, 1]
-    assert len(instances[0].fit_arguments[0]) == 16
-    assert len(instances[0].fit_arguments[2]) == 4
+    assert len(instances) == 3
+    if family == "kumo_medium":
+        assert [item[0]._parameters["random_state"] for item in instances] == [42, 0, 1]
+        assert len(instances[0][1].cache[0]) == 16
+        assert saved("model.json")["model_version"] == "v1.0.1"
+        assert saved("environment.json")["random_seeds"]["kumo"] == 42
+        assert "Kumo-Tabular-Medium-FT" in (output / "summary.md").read_text()
+    else:
+        assert len(exports) == 3
+        assert [item.parameters["random_state"] for item in instances] == [42, 0, 1]
+        assert len(instances[0].fit_arguments[0]) == 16
+        assert len(instances[0].fit_arguments[2]) == 4
+        assert saved("environment.json")["random_seeds"]["tabpfn"] == 42
+        assert saved("model.json")["model_version"] == "v3.5"
+        assert "TabPFN-3.5-FT" in (output / "summary.md").read_text()
     metric = "mse" if task == "regression" else "roc_auc"
     assert saved("finetune_metadata.json")["selection_metric"] == metric
     assert saved("finetune_metadata.json")["selected_epoch"] == 1
-    assert saved("environment.json")["random_seeds"]["tabpfn"] == 42
-    assert saved("model.json")["model_version"] == "v3.5"
     assert saved("wandb_run.json")["status"] == "finished"
-    assert "TabPFN-3.5-FT" in (output / "summary.md").read_text()
     assert "TabICL" not in (output / "summary.md").read_text()
     assert len(pd.read_csv(output / "bootstrap_dev.csv")) == 10
     assert len(pd.read_csv(output / "repeated_holdout_metrics.csv")) == 2
