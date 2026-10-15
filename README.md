@@ -266,6 +266,27 @@ Each preset runs in a separate process on `cuda:0`. Smoke failures block full ex
 
 Verification checks resolved settings, package/model version, CUDA device, checkpoint hash, prediction counts and finite values, development/test metrics, bootstrap count, holdout seeds and assignments, and W&B completion. Both aggregate test CSVs are rebuilt and checked for every completed matrix run. `--verify-only` checks without training. Use existing collectors and the comparison command for matching saved TabICL runs; absent baselines remain missing.
 
+### Frozen in-context learning matrix
+
+The `frozen_icl` mode evaluates TabICLv2, TabPFN-3.5, and Kumo Medium on E-DAIC classification and PHQ-8 regression across audio, visual, and combined features. Each full run uses eight pretrained estimators and a fixed 80/20 context/reserved partition of official training participants. Reserved validation participants are recorded but never used for checkpoint selection or calibration. Pretrained weights stay frozen; the models run without gradient updates, optimizer steps, or epochs. Test predictions are generated before test labels are loaded for scoring.
+
+There are 18 full presets and six audio-visual smoke presets. Full presets retain 2,000 development bootstrap samples and 30 nested train-only repeated holdouts. Validate every ICL preset before launching the GPU matrix:
+
+```bash
+for preset in configs/experiments/*_icl_*.yaml; do
+  uv run --no-sync python -m daic_foundation_tab.cli validate --config "$preset" || exit 1
+done
+```
+
+Run or verify the complete frozen ICL matrix on `cuda:0`:
+
+```bash
+uv run --no-sync python -m daic_foundation_tab.matrix --model-family all --mode frozen_icl
+uv run --no-sync python -m daic_foundation_tab.matrix --model-family all --mode frozen_icl --verify-only
+```
+
+All smokes run before any full preset. The launcher records attempts in `outputs/frozen_icl/matrix_status.json`, resumes only verified complete runs, and writes model/checkpoint hashes, context assignments, predictions, metrics, and runtime metadata into each run directory. The full GPU matrix is intentionally launched by the operator; config and workflow tests use mocks and do not download or run the pretrained models.
+
 ### Opt-in real-model checks
 
 Automated tests use synthetic participants and mocked native training. Native constructors are checked without loading weights. Two additional one-epoch GPU checks validate finite predictions and checkpoint reloadability when explicitly enabled on the remote host with an authorized local checkpoint:
