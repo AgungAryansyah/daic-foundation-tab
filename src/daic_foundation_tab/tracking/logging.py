@@ -52,7 +52,13 @@ def log_progress(
 ) -> None:
     elapsed = time.perf_counter() - started
     eta = elapsed * (total - completed) / completed if completed else None
-    unit = {"preparing features": "participants", "training": "epochs", "repeated holdout": "repeats", "bootstrapping development": "resamples"}.get(name, "items")
+    unit = {
+        "preparing features": "participants",
+        "preparing ICL context": "context participants",
+        "training": "epochs",
+        "repeated holdout": "repeats",
+        "bootstrapping development": "resamples",
+    }.get(name, "items")
     logger.info(
         "phase=%s progress=%s/%s %s (%.1f%%) elapsed=%.1fs throughput=%.2f %s/s ETA=%s",
         name,

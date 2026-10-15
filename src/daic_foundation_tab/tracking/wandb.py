@@ -88,6 +88,7 @@ def sanitized_wandb_config(
         "project": {"seed": config["project"]["seed"]},
         "experiment": {
             "name": config["experiment"].get("name"),
+            "mode": config["experiment"].get("mode", "fine_tuning"),
             "task": config["experiment"]["task"],
             "feature_set": config["experiment"]["feature_set"],
         },
@@ -184,7 +185,7 @@ def _safe_model_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     return _redact_paths(
         {
             key: metadata[key]
-            for key in ("model_name", "package", "package_version", "package_revision", "model_version", "checkpoint", "checkpoint_revision", "model_repository", "size", "parameters")
+            for key in ("model_name", "package", "package_version", "package_revision", "model_version", "checkpoint", "checkpoint_revision", "checkpoint_sha256", "model_repository", "size", "frozen", "parameters")
             if key in metadata
         }
     )
@@ -244,11 +245,18 @@ class WandbTracker:
             experiment = config["experiment"]
             run_id = artifacts.path.name
             experiment_name = str(experiment.get("name") or experiment["feature_set"])
-            run_type = "smoke" if config["model"]["parameters"].get("epochs") == 1 else "full"
+            run_type = (
+                "smoke"
+                if experiment.get("profile") == "smoke"
+                or config["model"]["parameters"].get("epochs") == 1
+                else "full"
+            )
+            mode = experiment.get("mode", "fine_tuning")
             tags = [
                 str(config["model"]["name"]),
                 str(experiment["feature_set"]),
                 str(experiment["task"]),
+                str(mode),
                 run_type,
                 *settings["tags"],
             ]
@@ -258,7 +266,7 @@ class WandbTracker:
                 entity=tracker.entity,
                 name=f"{experiment_name}-{run_id}",
                 group=tracker.study_id,
-                job_type="fine_tuning",
+                job_type=str(mode),
                 tags=list(dict.fromkeys(tags)),
                 config=tracker.config,
                 mode=tracker.mode,
@@ -270,10 +278,9 @@ class WandbTracker:
                     x_save_requirements=False,
                 ),
             )
-            tracker.run.define_metric("fine_tuning/epoch", hidden=True)
-            tracker.run.define_metric(
-                "fine_tuning/*", step_metric="fine_tuning/epoch"
-            )
+            if mode == "fine_tuning":
+                tracker.run.define_metric("fine_tuning/epoch", hidden=True)
+                tracker.run.define_metric("fine_tuning/*", step_metric="fine_tuning/epoch")
         tracker._write_run_record("running" if tracker.run is not None else "disabled")
         return tracker
 
@@ -349,6 +356,44 @@ class WandbTracker:
             scalars = _scalar_values("fine_tuning", values)
             self.run.log(scalars, step=int(epoch) + 1)
             self.run.summary.update(scalars)
+
+    def record_icl_context(
+        self,
+        context_target: pd.Series,
+        reserved_target: pd.Series,
+        feature_count: int,
+        elapsed_seconds: float,
+        metadata: Mapping[str, Any],
+    ) -> None:
+        summarize = (
+            _score_summary if self.config["experiment"]["task"] == "regression" else _class_summary
+        )
+        record = {
+            "context": summarize(context_target),
+            "reserved_validation": summarize(reserved_target),
+            "feature_count": feature_count,
+            "context_setup_seconds": elapsed_seconds,
+            "n_estimators": metadata["n_estimators"],
+            "checkpoint_sha256": metadata["checkpoint_sha256"],
+            "weights_before_inference_sha256": metadata[
+                "weights_before_inference_sha256"
+            ],
+            "weights_frozen": metadata["weights_frozen"],
+            "gradients_enabled": metadata["gradients_enabled"],
+            "optimizer_steps": metadata["optimizer_steps"],
+            "epochs_completed": metadata["epochs_completed"],
+        }
+        self.data_card["icl_context"] = _json_value(record)
+        self.results["icl_context"] = _json_value(record)
+        self._log(
+            "icl_context",
+            {
+                "context_rows": len(context_target),
+                "reserved_validation_rows": len(reserved_target),
+                "feature_count": feature_count,
+                "context_setup_seconds": elapsed_seconds,
+            },
+        )
 
     def record_development(self, metrics: Mapping[str, Any]) -> None:
         scalar_metrics = _scalar_values("", metrics)

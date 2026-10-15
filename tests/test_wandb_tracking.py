@@ -204,7 +204,14 @@ def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeyp
         "save_code": False,
         "x_save_requirements": False,
     }
-    assert {"tabiclv2_ft", "audio", "classification", "full", "research"} == set(
+    assert {
+        "tabiclv2_ft",
+        "audio",
+        "classification",
+        "fine_tuning",
+        "full",
+        "research",
+    } == set(
         fake_wandb.init_arguments["tags"]
     )
     assert fake_wandb.run.finished == [0]
@@ -275,6 +282,42 @@ def test_regression_tracker_records_score_summary_and_mae(monkeypatch, tmp_path)
     assert tracker.data_card["splits"]["train"]["phq8_score"]["mean"] == 9.5
     assert fake_wandb.run.summary["development/mae"] == 2.5
     assert fake_wandb.run.summary["development/derived_depressed_f1"] == 0.5
+
+
+def test_frozen_icl_smoke_run_is_tagged_as_smoke(monkeypatch, tmp_path) -> None:
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    config = _config()
+    config["experiment"].update(mode="frozen_icl", profile="smoke")
+    config["model"] = {
+        "name": "tabiclv2_icl",
+        "checkpoint_version": "tabicl-classifier-v2",
+        "parameters": {"n_estimators": 8, "device": "cuda:0", "random_state": 42},
+    }
+    artifacts = RunArtifacts(tmp_path, "tabiclv2_icl", "audio_visual", 42)
+
+    tracker = WandbTracker.start(config, artifacts, _validation(), "cache-key")
+    tracker.record_icl_context(
+        pd.Series([0, 1]),
+        pd.Series([0, 1]),
+        5,
+        1.2,
+        {
+            "n_estimators": 8,
+            "checkpoint_sha256": "checkpoint-hash",
+            "weights_before_inference_sha256": "a" * 64,
+            "weights_frozen": True,
+            "gradients_enabled": False,
+            "optimizer_steps": 0,
+            "epochs_completed": 0,
+        },
+    )
+
+    assert fake_wandb.init_arguments["job_type"] == "frozen_icl"
+    assert "smoke" in fake_wandb.init_arguments["tags"]
+    assert "fine_tuning" not in fake_wandb.init_arguments["tags"]
+    assert tracker.data_card["icl_context"]["optimizer_steps"] == 0
+    assert tracker.data_card["icl_context"]["epochs_completed"] == 0
 
 
 def test_tracker_loads_wandb_key_from_project_dotenv(monkeypatch, tmp_path) -> None:

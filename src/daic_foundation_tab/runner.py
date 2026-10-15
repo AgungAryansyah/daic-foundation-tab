@@ -118,6 +118,10 @@ def _model_for_seed(model_config: dict[str, Any], random_state: int) -> FineTuna
 
 
 def run_experiment(config: dict[str, Any]) -> Path:
+    if config["experiment"].get("mode", "fine_tuning") == "frozen_icl":
+        from daic_foundation_tab.icl_runner import run_icl_experiment
+
+        return run_icl_experiment(config)
     if config["experiment"]["task"] == "regression":
         from daic_foundation_tab.regression_runner import run_regression_experiment
 
