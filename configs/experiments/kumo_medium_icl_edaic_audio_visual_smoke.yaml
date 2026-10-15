@@ -1,0 +1,9 @@
+extends:
+- kumo_medium_icl_edaic_audio_visual.yaml
+bootstrap:
+  enabled: false
+experiment:
+  profile: smoke
+evaluation:
+  repeated_holdout:
+    enabled: false

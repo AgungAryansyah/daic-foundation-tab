@@ -1,0 +1,8 @@
+model:
+  name: tabpfn35_icl
+  checkpoint_version: tabpfn-v3.5-20260909.safetensors
+  parameters:
+    n_estimators: 8
+    device: cuda:0
+    random_state: 42
+  model_version: v3.5

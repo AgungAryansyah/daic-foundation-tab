@@ -1,0 +1,18 @@
+extends:
+- ../base.yaml
+- ../datasets/edaic.yaml
+- ../models/tabpfn35_icl_regressor.yaml
+project:
+  output_root: outputs/frozen_icl
+modalities:
+  audio:
+    enabled: true
+  visual:
+    enabled: true
+experiment:
+  name: tabpfn35_icl_regressor_edaic_audio_visual
+  mode: frozen_icl
+  task: regression
+  feature_set: audio_visual
+evaluation:
+  threshold: null

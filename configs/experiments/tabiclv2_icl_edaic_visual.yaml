@@ -1,0 +1,16 @@
+extends:
+- ../base.yaml
+- ../datasets/edaic.yaml
+- ../models/tabiclv2_icl.yaml
+project:
+  output_root: outputs/frozen_icl
+modalities:
+  audio:
+    enabled: false
+  visual:
+    enabled: true
+experiment:
+  name: tabiclv2_icl_edaic_visual
+  mode: frozen_icl
+  task: classification
+  feature_set: visual

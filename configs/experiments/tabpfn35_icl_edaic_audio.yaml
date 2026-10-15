@@ -1,0 +1,16 @@
+extends:
+- ../base.yaml
+- ../datasets/edaic.yaml
+- ../models/tabpfn35_icl.yaml
+project:
+  output_root: outputs/frozen_icl
+modalities:
+  audio:
+    enabled: true
+  visual:
+    enabled: false
+experiment:
+  name: tabpfn35_icl_edaic_audio
+  mode: frozen_icl
+  task: classification
+  feature_set: audio

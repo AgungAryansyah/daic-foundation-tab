@@ -1,0 +1,18 @@
+extends:
+- ../base.yaml
+- ../datasets/edaic.yaml
+- ../models/kumo_medium_icl_regressor.yaml
+project:
+  output_root: outputs/frozen_icl
+modalities:
+  audio:
+    enabled: true
+  visual:
+    enabled: false
+experiment:
+  name: kumo_medium_icl_regressor_edaic_audio
+  mode: frozen_icl
+  task: regression
+  feature_set: audio
+evaluation:
+  threshold: null

@@ -1,0 +1,7 @@
+model:
+  name: tabiclv2_icl
+  checkpoint_version: tabicl-classifier-v2-20260212.ckpt
+  parameters:
+    n_estimators: 8
+    device: cuda:0
+    random_state: 42
