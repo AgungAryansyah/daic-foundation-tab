@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import FineTunableClassifier, FineTunableRegressor
+from .icl import FrozenICLClassifier, FrozenICLRegressor, create_icl_model
 from .kumo_medium_ft import KumoMediumFineTunedModel, KumoMediumFineTunedRegressor
 from .tabiclv2_ft import TabICLv2FineTunedModel
 from .tabiclv2_ft_regressor import TabICLv2FineTunedRegressor
@@ -13,8 +14,12 @@ class ModelRegistryError(ValueError):
     pass
 
 
-def create_model(model_config: dict[str, Any]) -> FineTunableClassifier | FineTunableRegressor:
+def create_model(
+    model_config: dict[str, Any],
+) -> FineTunableClassifier | FineTunableRegressor | FrozenICLClassifier | FrozenICLRegressor:
     name = model_config.get("name")
+    if name.endswith(("_icl", "_icl_regressor")):
+        return create_icl_model(model_config)
     if name == "kumo_medium_ft":
         return KumoMediumFineTunedModel(model_config)
     if name == "kumo_medium_ft_regressor":
