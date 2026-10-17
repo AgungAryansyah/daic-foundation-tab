@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import weakref
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -328,8 +329,13 @@ def test_repeated_icl_holdout_keeps_evaluation_rows_out_of_context(task):
     participant_ids = pd.Series([f"p{index}" for index in range(len(target))])
     features = pd.DataFrame({"signal": target.astype(float), "varying": np.arange(len(target))})
     fitted_contexts = []
+    live_models = []
 
     class FakeModel:
+        def __init__(self):
+            assert not live_models
+            live_models.append(self)
+
         def fit_context(self, context_x, context_y):
             fitted_contexts.append((context_x["varying"].tolist(), len(context_y)))
             return self
@@ -340,6 +346,9 @@ def test_repeated_icl_holdout_keeps_evaluation_rows_out_of_context(task):
 
         def predict(self, evaluation_x):
             return evaluation_x["signal"].to_numpy(dtype=float)
+
+        def close(self):
+            live_models.remove(self)
 
     metrics, assignments = repeated_icl_holdout(
         features,
@@ -355,9 +364,60 @@ def test_repeated_icl_holdout_keeps_evaluation_rows_out_of_context(task):
 
     assert metrics["seed"].tolist() == [10, 11]
     assert len(fitted_contexts) == 2
+    assert not live_models
     assert all(context_rows < len(target) for _, context_rows in fitted_contexts)
     for assignment in assignments.values():
         groups = {role: set(rows["participant_id"]) for role, rows in assignment.groupby("role")}
         assert set(groups) == {"icl_context", "reserved_validation", "evaluation"}
         assert not groups["icl_context"] & groups["evaluation"]
         assert not groups["reserved_validation"] & groups["evaluation"]
+
+
+@pytest.mark.parametrize("failure_stage", ["context", "prediction"])
+def test_repeated_icl_holdout_releases_model_after_failure(failure_stage):
+    target = pd.Series(np.tile([0, 1], 40))
+    features = pd.DataFrame({"signal": np.arange(len(target), dtype=float)})
+    closed = []
+
+    class FailingModel:
+        def fit_context(self, *args):
+            if failure_stage == "context":
+                raise RuntimeError("context failed")
+
+        def predict_proba(self, *args):
+            raise RuntimeError("prediction failed")
+
+        def close(self):
+            closed.append(True)
+
+    with pytest.raises(RuntimeError, match=f"{failure_stage} failed"):
+        repeated_icl_holdout(
+            features, target, pd.Series([f"p{i}" for i in range(len(target))]),
+            2, 0.2, 0.2, 0, lambda _: FailingModel(), task="classification",
+        )
+    assert closed == [True]
+
+
+def test_frozen_icl_close_releases_cyclic_estimator_before_cuda_cache(monkeypatch):
+    class Estimator:
+        def __init__(self):
+            self.cycle = self
+
+    model = FrozenICLModel({"parameters": {"device": "cuda:0"}})
+    estimator = Estimator()
+    reference = weakref.ref(estimator)
+    model._estimator = estimator
+    model._weight_digest = "frozen"
+    del estimator
+    cleared = []
+
+    def empty_cache():
+        assert reference() is None
+        cleared.append(True)
+
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.cuda, "empty_cache", empty_cache)
+    model.close()
+    assert model._estimator is None
+    assert model._weight_digest is None
+    assert cleared == [True]

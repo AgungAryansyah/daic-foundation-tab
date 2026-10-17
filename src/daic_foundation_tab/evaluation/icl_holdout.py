@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+import psutil
 
 from daic_foundation_tab.data.validation import fit_feature_selection
 from daic_foundation_tab.evaluation.fine_tuning import stratified_fine_tune_partition
@@ -31,6 +33,8 @@ def repeated_icl_holdout(
         raise ValueError("Repeated frozen ICL holdout requires at least one repeat")
     rows = []
     assignments = {}
+    logger = logging.getLogger(__name__)
+    process = psutil.Process()
     for completed, seed in enumerate(range(seed_start, seed_start + repeats), start=1):
         target = target.reset_index(drop=True)
         participant_ids = participant_ids.reset_index(drop=True)
@@ -74,14 +78,30 @@ def repeated_icl_holdout(
         context_x = outer_features.iloc[inner.training_indices].reindex(columns=selection.columns)
         context_y = outer_target.iloc[inner.training_indices]
         evaluation_x = features.iloc[evaluation_indices].reindex(columns=selection.columns)
-        model = model_factory(seed).fit_context(context_x, context_y)
-        if task == "regression":
-            prediction = np.asarray(model.predict(evaluation_x), dtype=float)
-            metrics = regression_metrics(target.iloc[evaluation_indices], prediction)
-        else:
-            probability = np.asarray(model.predict_proba(evaluation_x), dtype=float)[:, 1]
-            prediction = (probability > threshold).astype(int)
-            metrics = classification_metrics(target.iloc[evaluation_indices], prediction, probability)
+        model = model_factory(seed)
+        try:
+            logger.info(
+                "phase=preparing repeated ICL context seed=%s progress=%s/%s repeats rss_mib=%.1f",
+                seed, completed - 1, repeats, process.memory_info().rss / 1024**2,
+            )
+            model.fit_context(context_x, context_y)
+            logger.info(
+                "phase=predicting repeated ICL holdout seed=%s rss_mib=%.1f",
+                seed, process.memory_info().rss / 1024**2,
+            )
+            if task == "regression":
+                prediction = np.asarray(model.predict(evaluation_x), dtype=float)
+                metrics = regression_metrics(target.iloc[evaluation_indices], prediction)
+            else:
+                probability = np.asarray(model.predict_proba(evaluation_x), dtype=float)[:, 1]
+                prediction = (probability > threshold).astype(int)
+                metrics = classification_metrics(target.iloc[evaluation_indices], prediction, probability)
+        finally:
+            model.close()
+            logger.info(
+                "phase=releasing repeated ICL context seed=%s rss_mib=%.1f",
+                seed, process.memory_info().rss / 1024**2,
+            )
         rows.append(
             {"seed": seed, **{key: value for key, value in metrics.items() if isinstance(value, float)}}
         )

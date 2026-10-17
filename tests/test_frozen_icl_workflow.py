@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from daic_foundation_tab import icl_runner, runner
 from daic_foundation_tab.matrix import verify_icl_run
@@ -13,8 +14,9 @@ from daic_foundation_tab.matrix import verify_icl_run
 from .helpers import write_synthetic_dataset
 
 
+@pytest.mark.parametrize("repeated_enabled", [False, True])
 def test_frozen_icl_runner_saves_provenance_and_loads_test_truth_after_predictions(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, repeated_enabled
 ):
     config = write_synthetic_dataset(tmp_path / "data")
     config["project"]["output_root"] = str(tmp_path / "outputs")
@@ -25,7 +27,9 @@ def test_frozen_icl_runner_saves_provenance_and_loads_test_truth_after_predictio
         "parameters": {"n_estimators": 8, "device": "cuda:0", "random_state": 42},
     }
     config["evaluation"]["test_predictions"] = True
-    config["evaluation"]["repeated_holdout"]["enabled"] = False
+    config["evaluation"]["repeated_holdout"] = {
+        "enabled": repeated_enabled, "repeats": 2, "validation_fraction": 0.2, "seed_start": 0,
+    }
     config["data"]["test_ground_truth"] = "original_labels/ground_truth.csv"
     ground_truth = pd.DataFrame(
         {"Participant_ID": ["500", "501"], "PHQ8_Score": [2, 11]}
@@ -72,6 +76,9 @@ def test_frozen_icl_runner_saves_provenance_and_loads_test_truth_after_predictio
                 "parameters": dict(config["model"]["parameters"]),
             }
 
+        def close(self):
+            events.append("close")
+
     class FakeTracker:
         def __init__(self, artifacts):
             self.artifacts = artifacts
@@ -89,6 +96,9 @@ def test_frozen_icl_runner_saves_provenance_and_loads_test_truth_after_predictio
         def record_test(self, *args):
             pass
 
+        def record_repeated_holdout(self, *args):
+            pass
+
         def complete(self, *args):
             self.artifacts.json(
                 "wandb_run.json",
@@ -104,6 +114,17 @@ def test_frozen_icl_runner_saves_provenance_and_loads_test_truth_after_predictio
         events.append("load_test_ground_truth")
         return original_load_test_ground_truth(*args, **kwargs)
 
+    def repeated_holdout(features, target, participant_ids, *args, **kwargs):
+        assert events[-1] == "close"
+        events.append("repeated_holdout")
+        assignment = pd.DataFrame({
+            "participant_id": participant_ids.to_numpy(),
+            "role": ["icl_context"] * 3 + ["reserved_validation"] + ["evaluation"] * 2,
+        })
+        return pd.DataFrame({"seed": [0, 1], "roc_auc": [0.7, 0.8]}), {
+            seed: assignment.copy() for seed in (0, 1)
+        }
+
     monkeypatch.setattr(icl_runner, "WandbTracker", FakeTracker)
     monkeypatch.setattr(icl_runner, "create_model", lambda _: FakeModel())
     monkeypatch.setattr(icl_runner, "require_cuda_device", lambda device: device)
@@ -115,11 +136,13 @@ def test_frozen_icl_runner_saves_provenance_and_loads_test_truth_after_predictio
     )
     monkeypatch.setattr(icl_runner, "environment_metadata", lambda device: {"cuda_device": device})
     monkeypatch.setattr(icl_runner, "load_test_ground_truth", track_test_truth)
+    monkeypatch.setattr(icl_runner, "repeated_icl_holdout", repeated_holdout)
 
     output = runner.run_experiment(config)
 
     assert events[0] == "fit_context"
     assert events.index("predict") < events.index("load_test_ground_truth")
+    assert events.count("close") == 1
     saved_metadata = json.loads((output / "icl_metadata.json").read_text())
     assert saved_metadata["weights_after_inference_sha256"] == "a" * 64
     assert len(pd.read_csv(output / "predictions_test.csv")) == 2

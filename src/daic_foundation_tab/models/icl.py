@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 from importlib.metadata import PackageNotFoundError, distribution, version
@@ -160,6 +161,13 @@ class FrozenICLModel:
     def predict(self, features: pd.DataFrame) -> np.ndarray:
         result = self._predict(features)
         return result.argmax(axis=1) if self.task == "classification" else result
+
+    def close(self) -> None:
+        self._estimator = None
+        self._weight_digest = None
+        gc.collect()
+        if torch.cuda.is_initialized():
+            torch.cuda.empty_cache()
 
     def _kumo_table(self, features: pd.DataFrame):
         import sdm

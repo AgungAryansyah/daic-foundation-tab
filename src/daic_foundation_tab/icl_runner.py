@@ -270,6 +270,20 @@ def run_icl_experiment(config: dict[str, Any]) -> Path:
                         ),
                     )
 
+        final_icl_metadata = model.icl_metadata()
+        if (
+            final_icl_metadata["weights_before_inference_sha256"]
+            != icl_metadata["weights_before_inference_sha256"]
+            or final_icl_metadata["checkpoint_sha256"] != icl_metadata["checkpoint_sha256"]
+        ):
+            raise RuntimeError("Frozen ICL weights or checkpoint changed during evaluation")
+        icl_metadata["weights_after_inference_sha256"] = final_icl_metadata[
+            "weights_before_inference_sha256"
+        ]
+        artifacts.json("icl_metadata.json", icl_metadata)
+        model_metadata = model.run_metadata()
+        model.close()
+
         bootstrap_summary = None
         if config["bootstrap"].get("enabled", False):
             with phase(logger, "bootstrapping development") as phase_started:
@@ -332,18 +346,6 @@ def run_icl_experiment(config: dict[str, Any]) -> Path:
             for holdout_seed, assignment in assignments.items():
                 assignment.to_csv(split_directory / f"seed_{holdout_seed:03d}.csv", index=False)
 
-        final_icl_metadata = model.icl_metadata()
-        if (
-            final_icl_metadata["weights_before_inference_sha256"]
-            != icl_metadata["weights_before_inference_sha256"]
-            or final_icl_metadata["checkpoint_sha256"] != icl_metadata["checkpoint_sha256"]
-        ):
-            raise RuntimeError("Frozen ICL weights or checkpoint changed during evaluation")
-        icl_metadata["weights_after_inference_sha256"] = final_icl_metadata[
-            "weights_before_inference_sha256"
-        ]
-        artifacts.json("icl_metadata.json", icl_metadata)
-
         ended_at = datetime.now(UTC)
         runtime = {
             "device": device,
@@ -358,7 +360,6 @@ def run_icl_experiment(config: dict[str, Any]) -> Path:
             "optimizer_steps": 0,
             "total_seconds": time.perf_counter() - started,
         }
-        model_metadata = model.run_metadata()
         artifacts.json("runtime.json", runtime)
         artifacts.json("model.json", model_metadata)
         artifacts.text(
