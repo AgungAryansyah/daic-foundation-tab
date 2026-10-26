@@ -39,6 +39,7 @@ def test_text_config_does_not_require_aggregation():
     [
         ("input", "kind", "audio"),
         ("model", "name", "tabiclv2_ft"),
+        ("model", "name", None),
         ("model", "model_id", "other"),
         ("runtime", "device", "cpu"),
     ],

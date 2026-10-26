@@ -21,7 +21,7 @@ def validate_text_config(config: Mapping) -> None:
     mode = config["experiment"].get("mode", "fine_tuning")
     try:
         capability = model_capabilities(config["model"].get("name", ""))
-    except ValueError as error:
+    except (TypeError, ValueError) as error:
         raise ConfigError(str(error)) from error
     require(capability.input_kind == "transcript", "Transcript input requires a text model")
     require(task in capability.tasks, "Unsupported transcript task")
