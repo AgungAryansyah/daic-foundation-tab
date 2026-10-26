@@ -4,6 +4,14 @@ This repository is a reproducible research pipeline for fine-tuning TabICLv2 and
 
 DAIC-WOZ is licensed sensitive data and is not included in this repository. Keep the dataset, feature cache, checkpoints, and experiment outputs outside version control.
 
+## Shared tabular and transcript architecture
+
+The repository also supports Qwen3.5-2B on interview transcripts with frozen ICL or LoRA fine-tuning.
+Both binary classification and generated PHQ-8 scores use shared participant manifests and existing task metrics.
+The tabular runners retain their current defaults.
+See [the architecture and usage guide](docs/architecture.md) for interfaces, validation examples, checkpoint resume, and paired comparisons.
+The examples do not define research campaigns.
+
 ## Remote environment
 
 Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.9.1 with CUDA 13.0, and an NVIDIA driver from the R580 series or newer. Linux driver 580.65.06 or newer is recommended for CUDA 13.0; see the [NVIDIA compatibility table](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver). The CUDA 13 wheel requires a supported NVIDIA GPU (Turing or newer) and glibc 2.28 or newer. CPU fine-tuning is intentionally unsupported.
@@ -17,7 +25,7 @@ uv run --python 3.12 python -c "import torch; assert torch.cuda.is_available(); 
 
 The [official CUDA 13 PyTorch wheels](https://pytorch.org/get-started/previous-versions/#v2-9-1) supply the CUDA runtime through Python dependencies; installing a separate system CUDA toolkit is unnecessary for these experiments. `nvidia-smi` reports driver capability, while `torch.version.cuda` reports the runtime used by PyTorch. Resync an existing environment with `uv sync --group dev --python 3.12 --locked`.
 
-Every experiment requires `cuda:0`. The runner verifies CUDA before reading data, creating outputs, or initializing W&B, then records the selected device, CUDA runtime, GPU model, VRAM, and peak memory use.
+Every experiment requires `cuda:0`. The runner creates a lifecycle record before CUDA validation, so early failures remain observable. It verifies CUDA before reading data or initializing W&B, then records the selected device, CUDA runtime, GPU model, VRAM, and peak memory use.
 
 ## W&B setup
 
