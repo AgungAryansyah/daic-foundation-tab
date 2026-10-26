@@ -10,6 +10,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from daic_foundation_tab.data.dataset import ParticipantDataset
+from daic_foundation_tab.data.participants import saved_partition
 from daic_foundation_tab.data.validation import TrainFeatureSelection, fit_feature_selection
 from daic_foundation_tab.evaluation.metrics import classification_metrics
 from daic_foundation_tab.models.base import FineTunableClassifier
@@ -78,7 +79,7 @@ def prepare_fine_tune_splits(
     dev_x, dev_y = dataset.get_split("dev", feature_set)
     test_x, _ = dataset.get_split("test", feature_set)
     train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"].reset_index(drop=True)
-    partition = stratified_fine_tune_partition(
+    partition = saved_partition(dataset) or stratified_fine_tune_partition(
         train_y.reset_index(drop=True), train_ids, validation_fraction, random_state
     )
     selection = fit_feature_selection(train_x.iloc[partition.training_indices])

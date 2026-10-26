@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from daic_foundation_tab.data.dataset import ParticipantDataset
+from daic_foundation_tab.data.participants import saved_partition
 from daic_foundation_tab.data.validation import TrainFeatureSelection, fit_feature_selection
 from daic_foundation_tab.evaluation.fine_tuning import (
     FineTunePartition,
@@ -44,7 +45,7 @@ def prepare_icl_splits(
     partitioner = (
         regression_fine_tune_partition if task == "regression" else stratified_fine_tune_partition
     )
-    partition: FineTunePartition = partitioner(
+    partition: FineTunePartition = saved_partition(dataset, "icl_context", "reserved_validation") or partitioner(
         target,
         train_ids,
         validation_fraction,

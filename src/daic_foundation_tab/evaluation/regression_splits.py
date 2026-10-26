@@ -10,6 +10,7 @@ import pandas as pd
 from sklearn.model_selection import ShuffleSplit
 
 from daic_foundation_tab.data.dataset import ParticipantDataset
+from daic_foundation_tab.data.participants import saved_partition
 from daic_foundation_tab.data.validation import fit_feature_selection, validate_regression_dataset
 from daic_foundation_tab.evaluation.fine_tuning import FineTunePartition, PreparedFineTuneSplits
 from daic_foundation_tab.evaluation.regression import regression_metrics
@@ -97,7 +98,7 @@ def prepare_regression_splits(
     train_ids = dataset.table.loc[dataset.table["split"] == "train", "participant_id"].reset_index(
         drop=True
     )
-    partition = regression_fine_tune_partition(
+    partition = saved_partition(dataset) or regression_fine_tune_partition(
         train_y.reset_index(drop=True), train_ids, validation_fraction, random_state
     )
     selection = fit_feature_selection(train_x.iloc[partition.training_indices])

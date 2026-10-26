@@ -29,6 +29,9 @@ def _parser() -> argparse.ArgumentParser:
     compare = subparsers.add_parser("compare")
     compare.add_argument("runs", type=Path, nargs="+")
     compare.add_argument("--output", type=Path)
+    prepare = subparsers.add_parser("prepare-participants")
+    prepare.add_argument("--config", required=True, type=Path)
+    prepare.add_argument("--output", required=True, type=Path)
     collect = subparsers.add_parser("collect-test-results")
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     collect_regression = subparsers.add_parser("collect-regression-test-results")
@@ -136,7 +139,13 @@ def main() -> None:
         print(collect_regression_test_evaluations(args.output_root))
         return
     config = load_config(args.config)
-    if args.command == "inspect":
+    if args.command == "prepare-participants":
+        from daic_foundation_tab.data.participants import prepare_manifest
+
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(prepare_manifest(config), indent=2), encoding="utf-8")
+        print(args.output)
+    elif args.command == "inspect":
         _inspect(config)
     elif args.command == "build-features":
         _build_features(config)

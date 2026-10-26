@@ -26,6 +26,7 @@ class ParticipantDataset:
     inventory: dict[str, Any]
     label_audit: dict[str, Any]
     cache_key: str
+    partition_manifest: dict[str, Any] | None = None
 
     def feature_columns(self, feature_set: str) -> list[str]:
         modalities = {
@@ -181,6 +182,8 @@ def build_or_load_dataset(
     config: dict[str, Any],
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> ParticipantDataset:
+    from .participants import apply_manifest
+
     labels = load_official_labels(config["data"])
     discovery = discover_sources(labels.table, config["data"])
     if progress_callback is not None:
@@ -198,7 +201,7 @@ def build_or_load_dataset(
         )
         if progress_callback is not None:
             progress_callback(len(discovery.participants), len(discovery.participants))
-        return dataset
+        return apply_manifest(dataset, config)
 
     dataset = _build_dataset(config, labels, discovery, progress_callback)
     dataset.table.to_parquet(paths["table"], index=False)
@@ -206,4 +209,4 @@ def build_or_load_dataset(
     dataset.reconciliation.to_csv(paths["reconciliation"], index=False)
     paths["inventory"].write_text(json.dumps(dataset.inventory, indent=2), encoding="utf-8")
     paths["label_audit"].write_text(json.dumps(dataset.label_audit, indent=2), encoding="utf-8")
-    return dataset
+    return apply_manifest(dataset, config)
