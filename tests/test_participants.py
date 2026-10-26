@@ -64,3 +64,17 @@ def test_budget_is_reproducible_and_contains_selection_labels(tmp_path):
     assert prepare_manifest(config) == prepare_manifest(config)
     manifest = prepare_manifest(config)
     assert sum(row["role"] in {"fit", "selection"} for row in manifest["participants"]) == 4
+
+
+def test_unused_participants_do_not_enter_feature_preparation(tmp_path):
+    config = manifest_config(tmp_path)
+    config["study"] = {"label_budget": 4}
+    manifest = prepare_manifest(config)
+    unused = next(row["participant_id"] for row in manifest["participants"] if row["role"] == "unused")
+    for path in (tmp_path / "data/data").glob(f"{unused}_*"):
+        path.unlink()
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    config["experiment"]["partition_manifest"] = str(path)
+    dataset = build_or_load_dataset(config)
+    assert unused not in set(dataset.table["participant_id"])

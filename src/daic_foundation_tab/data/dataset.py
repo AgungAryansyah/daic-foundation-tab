@@ -182,13 +182,21 @@ def build_or_load_dataset(
     config: dict[str, Any],
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> ParticipantDataset:
-    from .participants import apply_manifest
+    from .participants import apply_manifest, fingerprint, load_manifest
 
     labels = load_official_labels(config["data"])
+    participant_manifest = None
+    if config["experiment"].get("partition_manifest"):
+        participant_manifest = load_manifest(config["experiment"]["partition_manifest"], config)
+        selected_ids = {str(row["participant_id"]) for row in participant_manifest["participants"]
+                        if row["role"] != "unused"}
+        labels = LabelLoadResult(labels.table.loc[labels.table["participant_id"].isin(selected_ids)], labels.audit)
     discovery = discover_sources(labels.table, config["data"])
     if progress_callback is not None:
         progress_callback(0, len(discovery.participants))
     cache_key = _fingerprint(config, discovery)
+    if participant_manifest:
+        cache_key = fingerprint({"features": cache_key, "manifest": participant_manifest["manifest_id"]})[:16]
     paths = _cache_paths(config, cache_key)
     if all(path.exists() for path in paths.values()):
         dataset = ParticipantDataset(
