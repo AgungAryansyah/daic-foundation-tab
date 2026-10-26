@@ -47,6 +47,13 @@ def _output_path(config: dict, prefix: str) -> Path:
 
 
 def _inspect(config: dict) -> Path:
+    if config.get("input", {}).get("kind") == "transcript":
+        from daic_foundation_tab.data.participants import participant_index
+
+        output = _output_path(config, "transcript_inspection")
+        participant_index(config).to_csv(output / "participant_inventory.csv", index=False)
+        print(output)
+        return output
     labels = load_official_labels(config["data"])
     discovery = discover_sources(labels.table, config["data"])
     output = _output_path(config, "dataset_inspection")
@@ -58,6 +65,8 @@ def _inspect(config: dict) -> Path:
 
 
 def _build_features(config: dict) -> None:
+    if config.get("input", {}).get("kind") == "transcript":
+        raise ValueError("build-features requires tabular input; use validate for transcripts")
     output = _output_path(config, "feature_build")
     logger = configure_run_logger(output / "run.log", config["logging"]["level"])
     with phase(logger, "preparing features") as started:
@@ -73,6 +82,21 @@ def _build_features(config: dict) -> None:
 
 
 def _validate(config: dict) -> Path:
+    if config.get("input", {}).get("kind") == "transcript":
+        from daic_foundation_tab.data.transcripts import load_transcripts
+
+        output = _output_path(config, "transcript_validation")
+        logger = configure_run_logger(output / "run.log", config.get("logging", {}).get("level", "INFO"))
+        with phase(logger, "preparing transcripts") as started:
+            dataset = load_transcripts(config, lambda n, total: log_progress(
+                logger, "preparing transcripts", n, total, started))
+        (output / "participant_manifest.json").write_text(json.dumps(dataset.manifest, indent=2), encoding="utf-8")
+        (output / "validation_report.json").write_text(json.dumps({
+            "participants": len(dataset.texts), "cache_key": dataset.cache_key,
+            "speaker_policy": config["data"]["transcripts"].get("speaker_policy", "participant_only"),
+        }, indent=2), encoding="utf-8")
+        print(output)
+        return output
     dataset = build_or_load_dataset(config)
     validate = (
         validate_regression_dataset
