@@ -37,6 +37,7 @@ def validate_text_config(config: Mapping) -> None:
     require(config["runtime"].get("require_cuda") is True, "Text runs require CUDA")
     require(config["runtime"].get("device") == "cuda:0", "runtime.device must be cuda:0")
     parameters = config["model"].get("parameters", {})
+    require(isinstance(parameters, Mapping), "model.parameters must be a mapping")
     require(parameters.get("dtype", "bfloat16") == "bfloat16", "Text profiles require bfloat16")
     require(
         not parameters.get("quantization"), "Quantization is not supported by the initial profile"
@@ -48,6 +49,7 @@ def validate_text_config(config: Mapping) -> None:
         ("epochs", 1),
         ("gradient_accumulation_steps", 1),
         ("lora_rank", 1),
+        ("checkpoint_steps", 1),
     ):
         value = parameters.get(
             key,
@@ -56,6 +58,7 @@ def validate_text_config(config: Mapping) -> None:
                 "epochs": 1,
                 "gradient_accumulation_steps": 1,
                 "lora_rank": 8,
+                "checkpoint_steps": 10,
             }.get(key),
         )
         require(

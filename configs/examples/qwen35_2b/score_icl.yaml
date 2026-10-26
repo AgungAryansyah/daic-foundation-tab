@@ -1,0 +1,8 @@
+extends: base.yaml
+experiment:
+  task: regression
+model:
+  parameters:
+    demonstrations: 2
+evaluation:
+  threshold: null

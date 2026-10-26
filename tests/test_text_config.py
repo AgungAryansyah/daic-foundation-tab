@@ -1,8 +1,9 @@
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
-from daic_foundation_tab.config import ConfigError, validate_config
+from daic_foundation_tab.config import ConfigError, load_config, validate_config
 from daic_foundation_tab.models.capabilities import model_capabilities
 
 
@@ -46,3 +47,28 @@ def test_rejects_incompatible_configuration(section, key, value):
     config[section][key] = value
     with pytest.raises(ConfigError):
         validate_config(config)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("checkpoint_steps", 0),
+        ("max_length", True),
+        ("demonstrations", -1),
+        ("learning_rate", float("nan")),
+    ],
+)
+def test_rejects_invalid_execution_settings(key, value):
+    config = text_config()
+    config["model"]["parameters"][key] = value
+    with pytest.raises(ConfigError):
+        validate_config(config)
+
+
+def test_all_text_examples_validate_without_loading_models():
+    root = Path(__file__).parents[1] / "configs/examples/qwen35_2b"
+    paths = list(root.glob("*.yaml"))
+    assert len(paths) == 5
+    for path in paths:
+        config = load_config(path)
+        assert config["input"]["kind"] == "transcript"
