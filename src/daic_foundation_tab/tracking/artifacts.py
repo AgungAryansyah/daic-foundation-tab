@@ -9,7 +9,13 @@ import pandas as pd
 
 
 class RunArtifacts:
-    def __init__(self, output_root: str | Path, model_name: str, feature_set: str, seed: int) -> None:
+    def __init__(self, output_root: str | Path, model_name: str, feature_set: str, seed: int,
+                 *, resume_path: str | Path | None = None) -> None:
+        if resume_path is not None:
+            self.path = Path(resume_path).expanduser().resolve()
+            if not self.path.is_dir():
+                raise ValueError("Resume directory does not exist")
+            return
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         self.path = Path(output_root).expanduser().resolve() / (
             f"{timestamp}_{model_name}_{feature_set}_{seed}"

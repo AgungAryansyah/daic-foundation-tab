@@ -14,6 +14,16 @@ class ModelRegistryError(ValueError):
     pass
 
 
+def create_text_model(config: dict[str, Any]):
+    from .capabilities import model_capabilities
+    from .qwen import QwenTextModel
+
+    capability = model_capabilities(config["model"]["name"])
+    if capability.input_kind != "transcript":
+        raise ModelRegistryError("Text execution requires a text model")
+    return QwenTextModel(config)
+
+
 def create_model(
     model_config: dict[str, Any],
 ) -> FineTunableClassifier | FineTunableRegressor | FrozenICLClassifier | FrozenICLRegressor:

@@ -26,6 +26,8 @@ def _parser() -> argparse.ArgumentParser:
     for command in ("inspect", "build-features", "validate", "run"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("--config", required=True, type=Path)
+        if command == "run":
+            subparser.add_argument("--resume", type=Path)
     compare = subparsers.add_parser("compare")
     compare.add_argument("runs", type=Path, nargs="+")
     compare.add_argument("--output", type=Path)
@@ -176,6 +178,10 @@ def main() -> None:
     elif args.command == "validate":
         _validate(config)
     elif args.command == "run":
+        if args.resume is not None:
+            if config.get("input", {}).get("kind") != "transcript":
+                raise ValueError("Explicit checkpoint resume is currently supported for text runs")
+            config["_resume_directory"] = str(args.resume)
         print(run_experiment(config))
 
 

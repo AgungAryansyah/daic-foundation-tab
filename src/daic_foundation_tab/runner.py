@@ -118,6 +118,10 @@ def _model_for_seed(model_config: dict[str, Any], random_state: int) -> FineTuna
 
 
 def run_experiment(config: dict[str, Any]) -> Path:
+    if config.get("input", {}).get("kind") == "transcript":
+        from daic_foundation_tab.text_runner import run_text_experiment
+
+        return run_text_experiment(config)
     from daic_foundation_tab.tracking.lifecycle import RunRecord
 
     artifacts = RunArtifacts(config["project"]["output_root"], config["model"]["name"],
