@@ -23,6 +23,8 @@ MODEL_FAMILIES = {
 
 
 def model_capabilities(name: str) -> ModelCapabilities:
+    if not isinstance(name, str):
+        raise ValueError("Model name must be a string")
     family = name.removesuffix("_regressor").removesuffix("_ft").removesuffix("_icl")
     try:
         return MODEL_FAMILIES[family]

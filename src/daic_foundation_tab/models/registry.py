@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any
 
 from .base import FineTunableClassifier, FineTunableRegressor
@@ -8,20 +9,28 @@ from .kumo_medium_ft import KumoMediumFineTunedModel, KumoMediumFineTunedRegress
 from .tabiclv2_ft import TabICLv2FineTunedModel
 from .tabiclv2_ft_regressor import TabICLv2FineTunedRegressor
 from .tabpfn35_ft import TabPFN35FineTunedModel, TabPFN35FineTunedRegressor
+from .text_base import TextModel
+
+TEXT_MODEL_FACTORIES = {
+    "qwen35_2b": ("daic_foundation_tab.models.qwen", "QwenTextModel"),
+}
 
 
 class ModelRegistryError(ValueError):
     pass
 
 
-def create_text_model(config: dict[str, Any]):
+def create_text_model(config: dict[str, Any]) -> TextModel:
     from .capabilities import model_capabilities
-    from .qwen import QwenTextModel
 
     capability = model_capabilities(config["model"]["name"])
     if capability.input_kind != "transcript":
         raise ModelRegistryError("Text execution requires a text model")
-    return QwenTextModel(config)
+    try:
+        module_name, class_name = TEXT_MODEL_FACTORIES[capability.family]
+    except KeyError as error:
+        raise ModelRegistryError(f"No text adapter registered for {capability.family}") from error
+    return getattr(import_module(module_name), class_name)(config)
 
 
 def create_model(
