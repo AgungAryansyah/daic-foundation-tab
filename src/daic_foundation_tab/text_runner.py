@@ -90,6 +90,10 @@ def run_text_experiment(config: dict) -> Path:
             identity_config = {
                 key: value for key, value in config.items() if not key.startswith("_")
             }
+            identity_config["model"] = {
+                **config["model"],
+                "revision": metadata["checkpoint_revision"],
+            }
             identity = fingerprint(
                 {
                     "config": identity_config,
@@ -133,12 +137,19 @@ def run_text_experiment(config: dict) -> Path:
                         log_progress(logger, "training adapters", completed, total, phase_started)
                         record.update(completed_steps=completed, total_steps=total)
 
+                    checkpoint_directory = artifacts.path / "checkpoints"
+                    resume_checkpoint = (
+                        bool(config.get("_resume_directory"))
+                        and (checkpoint_directory / "latest.json").is_file()
+                    )
+                    if config.get("_resume_directory") and not resume_checkpoint:
+                        logger.info("No complete training checkpoint; restarting adapter training")
                     model.fit(
                         training,
                         validation,
-                        artifacts.path / "checkpoints",
+                        checkpoint_directory,
                         training_progress,
-                        resume=bool(config.get("_resume_directory")),
+                        resume=resume_checkpoint,
                     )
                 fit_seconds = time.perf_counter() - phase_started
             predict_seconds = 0.0

@@ -122,3 +122,51 @@ def test_regression_uses_numeric_generation_and_rejects_invalid_output(tmp_path,
     adapter.tokenizer.decode = lambda *args, **kwargs: "PHQ score: 12"
     with pytest.raises(ValueError, match="numeric answer"):
         adapter.predict([TextExample("dev", "Tired")])
+
+
+def test_classification_scores_the_whole_answer_including_eos(tmp_path):
+    from types import SimpleNamespace
+
+    import torch
+
+    class UniformModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.zeros(1))
+            self.config = SimpleNamespace(max_position_embeddings=4096)
+
+        def forward(self, input_ids, logits_to_keep, **kwargs):
+            return SimpleNamespace(logits=torch.zeros(1, logits_to_keep, 10))
+
+    tokenizer = TinyTokenizer()
+    tokenizer.encode = lambda answer, **kwargs: [3, 4] if answer == "0" else [5]
+    config = text_config()
+    config["project"]["cache_root"] = str(tmp_path)
+    adapter = QwenTextModel(config, model=UniformModel(), tokenizer=tokenizer, revision="uniform")
+    adapter.prepare([])
+    prediction = adapter.predict([TextExample("query", "text")])[0]
+    assert prediction.probability_positive == pytest.approx(10 / 11)
+
+
+def test_resume_preserves_accumulation_with_a_partial_final_group(tmp_path):
+    training = [*examples(), TextExample("train2", "Sad", 1)]
+    validation = [TextExample("dev0", "Tired", 0), TextExample("dev1", "Well", 1)]
+    complete = tiny_adapter(tmp_path / "complete", mode="fine_tuning")
+    complete.parameters["gradient_accumulation_steps"] = 2
+    complete.fit(training, validation, tmp_path / "complete/checkpoints")
+    interrupted = tiny_adapter(tmp_path / "interrupted", mode="fine_tuning")
+    interrupted.parameters["gradient_accumulation_steps"] = 2
+
+    def stop(completed, total):
+        if completed == 1:
+            raise RuntimeError("interrupted")
+
+    with pytest.raises(RuntimeError, match="interrupted"):
+        interrupted.fit(training, validation, tmp_path / "interrupted/checkpoints", stop)
+    resumed = tiny_adapter(tmp_path / "interrupted", mode="fine_tuning")
+    resumed.parameters["gradient_accumulation_steps"] = 2
+    resumed.fit(training, validation, tmp_path / "interrupted/checkpoints", resume=True)
+    assert resumed.optimizer_steps == complete.optimizer_steps == 2
+    assert [item.probability_positive for item in resumed.predict(validation)] == pytest.approx(
+        [item.probability_positive for item in complete.predict(validation)]
+    )

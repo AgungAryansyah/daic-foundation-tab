@@ -102,6 +102,7 @@ def test_failed_run_can_resume_and_rejects_changed_settings(tmp_path, monkeypatc
     with pytest.raises(ValueError, match="identity mismatch"):
         runner.run_experiment(config)
     config["project"]["seed"] -= 1
+    config["model"]["revision"] = "fixture-revision"
     monkeypatch.setattr(
         text_runner, "create_text_model", lambda config: FakeTextModel("classification")
     )

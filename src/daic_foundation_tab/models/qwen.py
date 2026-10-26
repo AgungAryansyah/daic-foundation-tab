@@ -76,7 +76,10 @@ class QwenTextModel:
         if self.encoder.max_length > limit:
             raise ValueError("Configured context limit exceeds the model context window")
         for example in examples:
-            self.encoder.prompt(example)
+            prompt = self.encoder.prompt(example)
+            if self.task == "classification":
+                for answer in ("0", "1"):
+                    self.encoder.check_length(len(prompt), len(self.encoder.completion(answer)))
             if example.target is not None and self.mode == "fine_tuning":
                 self.encoder.training_record(example)
 
@@ -272,7 +275,7 @@ class QwenTextModel:
                     raise ValueError("Non-finite adapter training loss")
                 (loss / group_size).backward()
                 if (position + 1) % accumulation == 0 or position + 1 == len(order):
-                    torch.nn.utils.clip_grad_norm_(trainable, 1.0)
+                    torch.nn.utils.clip_grad_norm_(trainable, 1.0, error_if_nonfinite=True)
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
                     self.optimizer_steps += 1
