@@ -58,7 +58,11 @@ def _inspect(config: dict) -> Path:
         from daic_foundation_tab.data.participants import participant_index
 
         output = _output_path(config, "transcript_inspection")
-        participant_index(config).to_csv(output / "participant_inventory.csv", index=False)
+        logger = configure_run_logger(output / "run.log", "INFO")
+        with phase(logger, "preparing participants") as started:
+            index = participant_index(config, lambda n, total: log_progress(
+                logger, "preparing participants", n, total, started))
+        index.to_csv(output / "participant_inventory.csv", index=False)
         print(output)
         return output
     labels = load_official_labels(config["data"])
@@ -190,7 +194,11 @@ def main() -> None:
         from daic_foundation_tab.data.participants import prepare_manifest
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(prepare_manifest(config), indent=2), encoding="utf-8")
+        logger = configure_run_logger(args.output.with_suffix(".log"), "INFO")
+        with phase(logger, "preparing participants") as started:
+            manifest = prepare_manifest(config, lambda n, total: log_progress(
+                logger, "preparing participants", n, total, started))
+        args.output.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         print(args.output)
     elif args.command == "inspect":
         _inspect(config)

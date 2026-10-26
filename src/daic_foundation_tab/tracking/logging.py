@@ -59,6 +59,12 @@ def log_progress(
         "preparing features": "participants",
         "preparing ICL context": "context participants",
         "training": "epochs",
+        "training adapters": "optimizer steps",
+        "preparing participants": "input checks",
+        "preparing transcripts": "participants",
+        "predicting dev": "participants",
+        "predicting test": "participants",
+        "bootstrapping paired differences": "resamples",
         "repeated holdout": "repeats",
         "bootstrapping development": "resamples",
     }.get(name, "items")

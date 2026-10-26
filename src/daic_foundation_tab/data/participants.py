@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,7 @@ def source_matches(root: Path, pattern: str, participant_id: str) -> list[Path]:
     )
 
 
-def participant_index(config: dict) -> pd.DataFrame:
+def participant_index(config: dict, progress: Callable[[int, int], None] | None = None) -> pd.DataFrame:
     data = config["data"]
     if not data.get("dataset_id"):
         raise ValueError("data.dataset_id is required for shared participant manifests")
@@ -39,6 +40,10 @@ def participant_index(config: dict) -> pd.DataFrame:
     if not requested or not set(requested) <= {"tabular", "transcript"}:
         raise ValueError("study.required_inputs must select tabular and/or transcript")
     reasons = [[] for _ in range(len(table))]
+    total = len(table) * len(requested)
+    completed = 0
+    if progress:
+        progress(0, total)
     for kind in requested:
         if kind == "transcript":
             patterns = [data["transcripts"]["pattern"]]
@@ -68,14 +73,17 @@ def participant_index(config: dict) -> pd.DataFrame:
             available.append(present)
             if not present:
                 reasons[index].append(f"missing {kind}")
+            completed += 1
+            if progress:
+                progress(completed, total)
         table[f"has_{kind}"] = available
     table["included"] = [not reason for reason in reasons]
     table["exclusion_reason"] = ["; ".join(reason) for reason in reasons]
     return table
 
 
-def prepare_manifest(config: dict) -> dict:
-    index = participant_index(config)
+def prepare_manifest(config: dict, progress: Callable[[int, int], None] | None = None) -> dict:
+    index = participant_index(config, progress)
     table = index.loc[index["included"]].copy().reset_index(drop=True)
     if any(not (table["split"] == split).any() for split in ("train", "dev", "test")):
         raise ValueError("The selected cohort must contain train, dev, and test participants")

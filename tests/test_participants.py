@@ -78,3 +78,11 @@ def test_unused_participants_do_not_enter_feature_preparation(tmp_path):
     config["experiment"]["partition_manifest"] = str(path)
     dataset = build_or_load_dataset(config)
     assert unused not in set(dataset.table["participant_id"])
+
+
+def test_preparation_reports_progress_from_start(tmp_path):
+    config = manifest_config(tmp_path)
+    calls = []
+    prepare_manifest(config, lambda completed, total: calls.append((completed, total)))
+    assert calls[0] == (0, 10)
+    assert calls[-1] == (10, 10)
