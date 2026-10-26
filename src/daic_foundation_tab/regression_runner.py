@@ -102,14 +102,14 @@ def _summary(
     return "\n".join(lines) + "\n"
 
 
-def run_regression_experiment(config: dict[str, Any]) -> Path:
+def run_regression_experiment(config: dict[str, Any], *, artifacts: RunArtifacts | None = None) -> Path:
     device = require_cuda_device(config["runtime"]["device"])
     started_at = datetime.now(UTC)
     started = time.perf_counter()
     seed = int(config["project"]["seed"])
     set_global_seed(seed)
     feature_set = config["experiment"]["feature_set"]
-    artifacts = RunArtifacts(
+    artifacts = artifacts or RunArtifacts(
         config["project"]["output_root"], config["model"]["name"], feature_set, seed
     )
     logger = configure_run_logger(artifacts.path / "run.log", config["logging"]["level"])
@@ -142,6 +142,9 @@ def run_regression_experiment(config: dict[str, Any]) -> Path:
         ),
         len(prepared.selection.columns),
     )
+    from daic_foundation_tab.tracking.lifecycle import record_dataset
+
+    record_dataset(artifacts, config, dataset)
     write_config(config, artifacts.path / "config_resolved.yaml")
     from daic_foundation_tab.runner import _git_commit
 

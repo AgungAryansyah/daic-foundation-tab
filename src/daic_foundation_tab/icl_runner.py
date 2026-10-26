@@ -126,7 +126,7 @@ def _save_metric_artifacts(artifacts, prefix: str, metrics: dict[str, Any]) -> N
     )
 
 
-def run_icl_experiment(config: dict[str, Any]) -> Path:
+def run_icl_experiment(config: dict[str, Any], *, artifacts: RunArtifacts | None = None) -> Path:
     device = require_cuda_device(config["runtime"]["device"])
     started_at = datetime.now(UTC)
     started = time.perf_counter()
@@ -134,7 +134,7 @@ def run_icl_experiment(config: dict[str, Any]) -> Path:
     seed = int(config["project"]["seed"])
     set_global_seed(seed)
     feature_set = config["experiment"]["feature_set"]
-    artifacts = RunArtifacts(
+    artifacts = artifacts or RunArtifacts(
         config["project"]["output_root"], config["model"]["name"], feature_set, seed
     )
     logger = configure_run_logger(artifacts.path / "run.log", config["logging"]["level"])
@@ -174,6 +174,9 @@ def run_icl_experiment(config: dict[str, Any]) -> Path:
         },
     }
     _write_preparation_artifacts(artifacts, config, environment, validation, dataset, prepared)
+    from daic_foundation_tab.tracking.lifecycle import record_dataset
+
+    record_dataset(artifacts, config, dataset)
     tracker = WandbTracker.start(config, artifacts, validation, dataset.cache_key)
     try:
         reset_cuda_peak_memory(device)

@@ -118,14 +118,23 @@ def _model_for_seed(model_config: dict[str, Any], random_state: int) -> FineTuna
 
 
 def run_experiment(config: dict[str, Any]) -> Path:
+    from daic_foundation_tab.tracking.lifecycle import RunRecord
+
+    artifacts = RunArtifacts(config["project"]["output_root"], config["model"]["name"],
+                             config["experiment"]["feature_set"], config["project"]["seed"])
+    with RunRecord(artifacts, config).lifecycle():
+        return _run_tabular_experiment(config, artifacts)
+
+
+def _run_tabular_experiment(config: dict[str, Any], artifacts: RunArtifacts) -> Path:
     if config["experiment"].get("mode", "fine_tuning") == "frozen_icl":
         from daic_foundation_tab.icl_runner import run_icl_experiment
 
-        return run_icl_experiment(config)
+        return run_icl_experiment(config, artifacts=artifacts)
     if config["experiment"]["task"] == "regression":
         from daic_foundation_tab.regression_runner import run_regression_experiment
 
-        return run_regression_experiment(config)
+        return run_regression_experiment(config, artifacts=artifacts)
     device = require_cuda_device(config["runtime"]["device"])
     started_at = datetime.now(UTC)
     started = time.perf_counter()
@@ -134,12 +143,6 @@ def run_experiment(config: dict[str, Any]) -> Path:
     feature_set = config["experiment"]["feature_set"]
     threshold = float(config["evaluation"]["threshold"])
     fine_tuning_config = config["evaluation"]["fine_tuning"]
-    artifacts = RunArtifacts(
-        config["project"]["output_root"],
-        config["model"]["name"],
-        feature_set,
-        int(config["project"]["seed"]),
-    )
     logger = configure_run_logger(artifacts.path / "run.log", config["logging"]["level"])
     logger.info("run_id=%s", artifacts.path.name)
     logger.info("config_path=%s", config["_config_path"])
@@ -164,6 +167,9 @@ def run_experiment(config: dict[str, Any]) -> Path:
         )
     logger.info("participants train=%s dev=%s test=%s", *(validation["split_statistics"][split]["participants"] for split in ("train", "dev", "test")))
     logger.info("feature_count=%s", len(prepared.selection.columns))
+    from daic_foundation_tab.tracking.lifecycle import record_dataset
+
+    record_dataset(artifacts, config, dataset)
     write_config(config, artifacts.path / "config_resolved.yaml")
     environment = {
         **environment_metadata(device),

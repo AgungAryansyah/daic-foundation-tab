@@ -21,6 +21,9 @@ def configure_run_logger(path: Path, level: str) -> logging.Logger:
 
 @contextmanager
 def phase(logger: logging.Logger, name: str):
+    from .lifecycle import phase_status
+
+    phase_status(name)
     started = time.perf_counter()
     stopped = Event()
     logger.info("phase=%s status=started elapsed=0s ETA unavailable", name)
