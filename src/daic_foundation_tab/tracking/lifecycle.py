@@ -50,6 +50,19 @@ class RunRecord:
             self.update(status="failed", error_type=type(error).__name__, error=str(error))
             raise
         else:
+            for filename, field in (
+                ("runtime.json", "runtime"),
+                ("model.json", "model"),
+                ("model_metadata.json", "model"),
+            ):
+                path = self.artifacts.path / filename
+                if path.is_file():
+                    self.data[field] = json.loads(path.read_text())
+            environment_path = self.artifacts.path / "environment.json"
+            if environment_path.is_file():
+                self.data["source_revision"] = json.loads(environment_path.read_text()).get(
+                    "git_commit"
+                )
             self.update(status="completed", phase="completed")
         finally:
             CURRENT_RUN.reset(token)

@@ -31,6 +31,11 @@ def _parser() -> argparse.ArgumentParser:
     compare = subparsers.add_parser("compare")
     compare.add_argument("runs", type=Path, nargs="+")
     compare.add_argument("--output", type=Path)
+    paired = subparsers.add_parser("compare-paired")
+    paired.add_argument("runs", nargs=2, type=Path)
+    paired.add_argument("--output", type=Path, required=True)
+    paired.add_argument("--split", choices=["dev", "test"], default="dev")
+    paired.add_argument("--iterations", type=int, default=1000)
     prepare = subparsers.add_parser("prepare-participants")
     prepare.add_argument("--config", required=True, type=Path)
     prepare.add_argument("--output", required=True, type=Path)
@@ -139,6 +144,10 @@ def _markdown_table(table: pd.DataFrame) -> str:
 def _compare(runs: list[Path], output: Path | None) -> Path:
     rows = []
     for run in runs:
+        from daic_foundation_tab.tracking.lifecycle import completed_run
+
+        if not completed_run(run):
+            raise ValueError(f"Run is incomplete: {run}")
         metrics_path = run / "metrics_dev.json"
         if not metrics_path.is_file():
             raise ValueError(f"Missing development metrics: {metrics_path}")
@@ -155,6 +164,18 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "compare-paired":
+        from daic_foundation_tab.evaluation.paired import paired_comparison
+
+        args.output.mkdir(parents=True, exist_ok=True)
+        logger = configure_run_logger(args.output / "run.log", "INFO")
+        with phase(logger, "bootstrapping paired differences") as started:
+            table = paired_comparison(*args.runs, split=args.split, iterations=args.iterations,
+                progress=lambda n, total: log_progress(logger, "bootstrapping paired differences", n, total, started))
+        table.to_csv(args.output / "comparison.csv", index=False)
+        (args.output / "comparison.md").write_text(_markdown_table(table) + "\n", encoding="utf-8")
+        print(args.output)
+        return
     if args.command == "compare":
         _compare(args.runs, args.output)
         return

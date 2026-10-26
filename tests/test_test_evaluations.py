@@ -83,3 +83,12 @@ def test_regression_collector_is_separate_from_classification(tmp_path) -> None:
     assert regression["mae"].tolist() == [2.5]
     assert regression["derived_cutoff"].tolist() == [10]
     assert "threshold" not in regression.columns
+
+
+def test_collectors_exclude_failed_runs_even_when_metrics_exist(tmp_path):
+    failed = tmp_path / "failed"
+    failed.mkdir()
+    (failed / "study_run.json").write_text('{"status": "failed"}')
+    (failed / "metrics_test.csv").write_text("macro_f1\n0.9\n")
+    for collector in (collect_test_evaluations, collect_regression_test_evaluations):
+        assert pd.read_csv(collector(tmp_path)).empty

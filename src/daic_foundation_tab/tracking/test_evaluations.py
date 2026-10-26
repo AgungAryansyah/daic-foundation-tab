@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from .lifecycle import completed_run
+
 _IDENTITY_COLUMNS = ("run", "experiment", "dataset", "model", "feature_set", "seed", "threshold")
 _REGRESSION_IDENTITY_COLUMNS = _IDENTITY_COLUMNS[:-1]
 
@@ -26,14 +28,14 @@ def _evaluation_row(metrics_path: Path) -> dict[str, Any]:
     threshold = (
         json.loads(threshold_path.read_text(encoding="utf-8"))["threshold"]
         if threshold_path.is_file()
-        else 0.5
+        else config.get("evaluation", {}).get("threshold", 0.5)
     )
     return {
         "run": run.name,
         "experiment": config["experiment"].get("name", ""),
         "dataset": Path(config["data"]["root"]).name,
         "model": config["model"]["name"],
-        "feature_set": config["experiment"]["feature_set"],
+        "feature_set": config["experiment"].get("feature_set", "transcript"),
         "seed": config["project"]["seed"],
         "threshold": threshold,
         **{
@@ -53,7 +55,8 @@ def collect_test_evaluations(output_root: str | Path) -> Path:
         rows = [
             _evaluation_row(path.with_name("metrics_test.json"))
             for path in sorted(root.glob("*/metrics_test.csv"))
-            if _run_config(path.parent)["experiment"].get("task", "classification")
+            if completed_run(path.parent)
+            and _run_config(path.parent)["experiment"].get("task", "classification")
             == "classification"
         ]
         metric_columns = sorted({key for row in rows for key in row} - set(_IDENTITY_COLUMNS))
@@ -80,6 +83,8 @@ def collect_regression_test_evaluations(output_root: str | Path) -> Path:
         rows = []
         for path in sorted(root.glob("*/metrics_test.csv")):
             run = path.parent
+            if not completed_run(run):
+                continue
             config = _run_config(run)
             if config["experiment"].get("task") != "regression":
                 continue
@@ -90,7 +95,7 @@ def collect_regression_test_evaluations(output_root: str | Path) -> Path:
                     "experiment": config["experiment"].get("name", ""),
                     "dataset": Path(config["data"]["root"]).name,
                     "model": config["model"]["name"],
-                    "feature_set": config["experiment"]["feature_set"],
+                    "feature_set": config["experiment"].get("feature_set", "transcript"),
                     "seed": config["project"]["seed"],
                     **{
                         key: value

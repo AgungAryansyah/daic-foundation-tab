@@ -147,34 +147,32 @@ def run_text_experiment(config: dict) -> Path:
                     continue
                 examples = dataset.examples(split)
                 predictions = []
-                with phase(logger, f"predicting {split}") as phase_started:
-                    with (artifacts.path / f"responses_{split}.jsonl").open(
+                with (
+                    phase(logger, f"predicting {split}") as phase_started,
+                    (artifacts.path / f"responses_{split}.jsonl").open(
                         "w", encoding="utf-8"
-                    ) as responses:
-                        for completed, example in enumerate(examples, start=1):
-                            batch = model.predict([example])
-                            if len(batch) != 1:
-                                raise ValueError("Model must return one prediction per participant")
-                            prediction = batch[0]
-                            predictions.append(prediction)
-                            responses.write(
-                                json.dumps(
-                                    {
-                                        "participant_id": example.participant_id,
-                                        "raw_answer": prediction.raw_answer,
-                                        "prompt_tokens": prediction.prompt_tokens,
-                                    }
-                                )
-                                + "\n"
+                    ) as responses,
+                ):
+                    for completed, example in enumerate(examples, start=1):
+                        batch = model.predict([example])
+                        if len(batch) != 1:
+                            raise ValueError("Model must return one prediction per participant")
+                        prediction = batch[0]
+                        predictions.append(prediction)
+                        responses.write(
+                            json.dumps(
+                                {
+                                    "participant_id": example.participant_id,
+                                    "raw_answer": prediction.raw_answer,
+                                    "prompt_tokens": prediction.prompt_tokens,
+                                }
                             )
-                            responses.flush()
-                            log_progress(
-                                logger,
-                                f"predicting {split}",
-                                completed,
-                                len(examples),
-                                phase_started,
-                            )
+                            + "\n"
+                        )
+                        responses.flush()
+                        log_progress(
+                            logger, f"predicting {split}", completed, len(examples), phase_started
+                        )
                 predict_seconds += time.perf_counter() - phase_started
                 with phase(logger, f"evaluating {split}"):
                     target = None
@@ -220,6 +218,11 @@ def run_text_experiment(config: dict) -> Path:
                         metrics = regression_metrics(target, values) if target is not None else None
                     artifacts.csv(f"predictions_{split}.csv", table)
                     if metrics is not None:
+                        if config["experiment"]["task"] == "classification":
+                            artifacts.json(
+                                "decision_threshold.json",
+                                {"threshold": config["evaluation"]["threshold"]},
+                            )
                         artifacts.json(f"metrics_{split}.json", metrics)
                         artifacts.csv(
                             f"metrics_{split}.csv",
@@ -258,4 +261,16 @@ def run_text_experiment(config: dict) -> Path:
         if tracker:
             tracker.finish(failed=True)
         raise
+    if (artifacts.path / "metrics_test.csv").is_file():
+        from daic_foundation_tab.tracking.test_evaluations import (
+            collect_regression_test_evaluations,
+            collect_test_evaluations,
+        )
+
+        collector = (
+            collect_test_evaluations
+            if config["experiment"]["task"] == "classification"
+            else collect_regression_test_evaluations
+        )
+        collector(artifacts.path.parent)
     return artifacts.path

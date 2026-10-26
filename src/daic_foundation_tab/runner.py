@@ -127,7 +127,17 @@ def run_experiment(config: dict[str, Any]) -> Path:
     artifacts = RunArtifacts(config["project"]["output_root"], config["model"]["name"],
                              config["experiment"]["feature_set"], config["project"]["seed"])
     with RunRecord(artifacts, config).lifecycle():
-        return _run_tabular_experiment(config, artifacts)
+        result = _run_tabular_experiment(config, artifacts)
+    if (result / "metrics_test.csv").is_file():
+        if config["experiment"]["task"] == "classification":
+            collect_test_evaluations(result.parent)
+        else:
+            from daic_foundation_tab.tracking.test_evaluations import (
+                collect_regression_test_evaluations,
+            )
+
+            collect_regression_test_evaluations(result.parent)
+    return result
 
 
 def _run_tabular_experiment(config: dict[str, Any], artifacts: RunArtifacts) -> Path:
