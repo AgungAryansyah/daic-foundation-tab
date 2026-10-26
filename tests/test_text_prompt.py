@@ -9,6 +9,7 @@ class TinyTokenizer:
 
     def apply_chat_template(self, messages, **kwargs):
         assert kwargs["enable_thinking"] is False
+        assert kwargs["return_dict"] is False
         return [
             3 + ord(character) % 100 for message in messages for character in message["content"]
         ]
@@ -58,3 +59,20 @@ def test_invalid_scores_are_rejected(text):
 
 def test_decimal_scores_are_preserved():
     assert parse_score(" 12.5\n") == 12.5
+
+
+def test_native_transformers_template_returns_flat_integer_ids():
+    tokenizers = pytest.importorskip("tokenizers")
+    transformers = pytest.importorskip("transformers")
+    tokenizer = tokenizers.Tokenizer(
+        tokenizers.models.WordLevel({"[UNK]": 0, "[EOS]": 1}, unk_token="[UNK]")
+    )
+    tokenizer = transformers.PreTrainedTokenizerFast(
+        tokenizer_object=tokenizer,
+        unk_token="[UNK]",
+        eos_token="[EOS]",
+        chat_template="{% for message in messages %}{{ message['content'] }} {% endfor %}",
+    )
+    encoder = PromptEncoder(tokenizer, "classification", {"max_length": 4096}, {})
+    tokens = encoder.prompt(TextExample("query", "A synthetic transcript"))
+    assert tokens and all(isinstance(token, int) for token in tokens)

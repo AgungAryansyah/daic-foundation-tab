@@ -80,7 +80,7 @@ class PromptEncoder:
     def prompt(self, example: TextExample) -> list[int]:
         messages = self.messages(example)
         key = fingerprint(
-            {"version": 1, "identity": self.identity, "messages": messages, "thinking": False}
+            {"version": 2, "identity": self.identity, "messages": messages, "thinking": False}
         )
         cache = self.cache_root / f"{key}.json" if self.cache_root else None
         if cache and cache.is_file():
@@ -92,6 +92,7 @@ class PromptEncoder:
                     tokenize=True,
                     add_generation_prompt=True,
                     enable_thinking=False,
+                    return_dict=False,
                 )
             )
             if cache:
@@ -99,8 +100,10 @@ class PromptEncoder:
                 temporary = cache.with_suffix(".tmp")
                 temporary.write_text(json.dumps(tokens), encoding="utf-8")
                 temporary.replace(cache)
-        if not tokens:
-            raise ValueError("Chat template produced an empty prompt")
+        if not tokens or any(
+            not isinstance(token, int) or isinstance(token, bool) or token < 0 for token in tokens
+        ):
+            raise ValueError("Chat template must produce a flat list of integer token IDs")
         self.check_length(len(tokens), self.max_new_tokens)
         return tokens
 
