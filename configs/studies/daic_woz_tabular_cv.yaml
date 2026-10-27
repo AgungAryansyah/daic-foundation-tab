@@ -1,0 +1,19 @@
+extends: ../base.yaml
+
+data:
+  dataset_id: daic_woz
+
+tabular_study:
+  name: daic-woz-tabular-cv
+  model_families: [tabpfn35, kumo_medium]
+  modalities: [audio, visual, audio_visual]
+  tasks: [classification, regression]
+  methods: [frozen_icl, fine_tuning]
+  model_seeds: [42]
+  folds: 5
+  fold_seed: 42
+  selection_fraction: 0.2
+  selection_seed_offset: 10000
+  tabular_profiles: ../models
+  bootstrap_iterations: 2000
+  bootstrap_seed: 42
