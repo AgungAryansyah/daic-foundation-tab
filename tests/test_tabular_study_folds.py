@@ -62,3 +62,9 @@ def test_folds_reject_missing_class_in_evaluation():
     ] = 1
     with pytest.raises(ValueError):
         make_folds(data, settings())
+
+
+def test_folds_accept_nullable_integer_labels_from_dataset():
+    data = participants()
+    data["target_binary"] = data["target_binary"].astype("Int64")
+    assert len(make_folds(data, settings())["classification"]["folds"]) == 5

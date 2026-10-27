@@ -22,6 +22,8 @@ def make_folds(table: pd.DataFrame, settings: dict) -> dict:
             raise ValueError("Training targets must be finite")
         if task == "classification" and set(target.astype(int)) != {0, 1}:
             raise ValueError("Classification requires both classes")
+        if task == "classification":
+            target = target.astype(int)
         splitter = (
             StratifiedKFold(
                 n_splits=settings["folds"], shuffle=True, random_state=settings["fold_seed"]
