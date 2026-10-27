@@ -83,12 +83,10 @@ def record_dataset(artifacts, config, dataset):
         ids = [
             (str(row["participant_id"]), row["split"], row["role"])
             for row in manifest["participants"]
-            if row["role"] != "unused"
         ]
         values.update(
             manifest_id=manifest["manifest_id"],
             cohort_id=fingerprint(ids),
-            label_budget=manifest["label_budget"],
             fit_labels=sum(row["role"] == "fit" for row in manifest["participants"]),
             selection_labels=sum(row["role"] == "selection" for row in manifest["participants"]),
             selection_labels_used=config["experiment"].get("mode", "fine_tuning") == "fine_tuning",

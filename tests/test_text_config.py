@@ -83,3 +83,10 @@ def test_registered_factory_does_not_load_weights():
     config["model"]["name"] = "tabiclv2_ft"
     with pytest.raises(ModelRegistryError):
         create_text_model(config)
+
+
+def test_removed_training_subsampling_option_is_rejected():
+    config = text_config()
+    config["study"] = {"label_budget": 4}
+    with pytest.raises(ConfigError, match="was removed"):
+        validate_config(config)

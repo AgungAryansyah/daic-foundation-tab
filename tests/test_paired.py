@@ -16,7 +16,6 @@ def write_run(root, name, task="classification"):
         "task": task,
         "manifest_id": "same-manifest",
         "cohort_id": "same-cohort",
-        "label_budget": 20,
     }
     (path / "study_run.json").write_text(json.dumps(record))
     table = (

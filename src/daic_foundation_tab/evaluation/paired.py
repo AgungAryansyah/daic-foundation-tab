@@ -27,7 +27,7 @@ def paired_comparison(
                 "Paired comparison requires completed runs with verified participant manifests"
             )
         records.append(record)
-    for key in ("dataset_id", "task", "manifest_id", "cohort_id", "label_budget"):
+    for key in ("dataset_id", "task", "manifest_id", "cohort_id"):
         if records[0].get(key) is None or records[0][key] != records[1].get(key):
             raise ValueError(f"Incompatible paired comparison: {key}")
     tables = [

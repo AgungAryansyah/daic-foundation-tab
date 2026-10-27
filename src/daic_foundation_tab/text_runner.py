@@ -264,7 +264,8 @@ def run_text_experiment(config: dict) -> Path:
                 f"# Qwen transcript result\n\nTask: {config['experiment']['task']}\n"
                 f"Adaptation: {metadata['adaptation']}\n"
                 f"Participants: {len(dataset.texts)}\n"
-                f"Label budget: {dataset.manifest['label_budget']}\n"
+                f"Fit/context pool: {len(training)} participants\n"
+                f"Selection pool: {len(validation)} participants\n"
                 "\nMetrics and participant predictions are saved beside this summary.\n",
             )
             tracker.finish()

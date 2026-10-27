@@ -77,6 +77,8 @@ def test_text_execution_preserves_schema_and_records_completed_run(
     record = json.loads((output / "study_run.json").read_text())
     assert record["status"] == "completed" and record["paired_comparison_verified"]
     assert record["selection_labels_used"] == (mode == "fine_tuning")
+    assert "label_budget" not in record
+    assert "Label budget" not in (output / "summary.md").read_text()
     assert (output / "metrics_dev.json").is_file()
     assert not (output / "metrics_test.json").exists()
     table = pd.read_csv(output / "predictions_test.csv")

@@ -188,8 +188,7 @@ def build_or_load_dataset(
     participant_manifest = None
     if config["experiment"].get("partition_manifest"):
         participant_manifest = load_manifest(config["experiment"]["partition_manifest"], config)
-        selected_ids = {str(row["participant_id"]) for row in participant_manifest["participants"]
-                        if row["role"] != "unused"}
+        selected_ids = {str(row["participant_id"]) for row in participant_manifest["participants"]}
         labels = LabelLoadResult(labels.table.loc[labels.table["participant_id"].isin(selected_ids)], labels.audit)
     discovery = discover_sources(labels.table, config["data"])
     if progress_callback is not None:

@@ -9,7 +9,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit
 
 from .labels import load_official_labels
 
@@ -27,7 +26,9 @@ def source_matches(root: Path, pattern: str, participant_id: str) -> list[Path]:
     )
 
 
-def participant_index(config: dict, progress: Callable[[int, int], None] | None = None) -> pd.DataFrame:
+def participant_index(
+    config: dict, progress: Callable[[int, int], None] | None = None
+) -> pd.DataFrame:
     data = config["data"]
     if not data.get("dataset_id"):
         raise ValueError("data.dataset_id is required for shared participant manifests")
@@ -83,6 +84,8 @@ def participant_index(config: dict, progress: Callable[[int, int], None] | None 
 
 
 def prepare_manifest(config: dict, progress: Callable[[int, int], None] | None = None) -> dict:
+    if "label_budget" in config.get("study", {}):
+        raise ValueError("study.label_budget was removed; use the full eligible training cohort")
     index = participant_index(config, progress)
     table = index.loc[index["included"]].copy().reset_index(drop=True)
     if any(not (table["split"] == split).any() for split in ("train", "dev", "test")):
@@ -92,19 +95,6 @@ def prepare_manifest(config: dict, progress: Callable[[int, int], None] | None =
         config["evaluation"]["fine_tuning"].get("validation_seed", config["project"]["seed"])
     )
     train = table.loc[table["split"] == "train"]
-    budget = config.get("study", {}).get("label_budget", len(train))
-    if isinstance(budget, bool) or not isinstance(budget, int) or not 2 <= budget <= len(train):
-        raise ValueError("label_budget must include fit and selection labels within training size")
-    if budget < len(train):
-        if task == "classification":
-            selected, _ = next(
-                StratifiedShuffleSplit(n_splits=1, train_size=budget, random_state=seed).split(
-                    np.zeros(len(train)), train["target_binary"].astype(int)
-                )
-            )
-        else:
-            selected = np.random.default_rng(seed).permutation(len(train))[:budget]
-        train = train.iloc[selected]
     from daic_foundation_tab.evaluation.fine_tuning import stratified_fine_tune_partition
     from daic_foundation_tab.evaluation.regression_splits import regression_fine_tune_partition
 
@@ -124,7 +114,7 @@ def prepare_manifest(config: dict, progress: Callable[[int, int], None] | None =
     )
     roles = partition.assignment.set_index("participant_id")["role"].to_dict()
     table["role"] = [
-        roles.get(row.participant_id, row.split if row.split != "train" else "unused")
+        roles[row.participant_id] if row.split == "train" else row.split
         for row in table.itertuples()
     ]
     records = json.loads(
@@ -137,7 +127,6 @@ def prepare_manifest(config: dict, progress: Callable[[int, int], None] | None =
         "dataset_id": config["data"]["dataset_id"],
         "task": task,
         "seed": seed,
-        "label_budget": budget,
         "required_inputs": config.get("study", {}).get(
             "required_inputs", [config.get("input", {}).get("kind", "tabular")]
         ),
@@ -167,17 +156,17 @@ def load_manifest(path: str | Path, config: dict) -> dict:
     permitted = {
         "fit": "train",
         "selection": "train",
-        "unused": "train",
         "dev": "dev",
         "test": "test",
     }
     if any(permitted.get(row.role) != row.split for row in table.itertuples()):
         raise ValueError("Participant manifest roles leak across official splits")
-    if int(table["role"].isin(["fit", "selection"]).sum()) != manifest["label_budget"]:
-        raise ValueError("Participant manifest label budget mismatch")
     if not {"fit", "selection", "dev", "test"} <= set(table["role"]):
         raise ValueError("Participant manifest is missing required roles")
     labels = load_official_labels(config["data"]).table.set_index("participant_id")
+    excluded_ids = {str(row["participant_id"]) for row in manifest.get("exclusions", [])}
+    if set(table["participant_id"]) != set(labels.index) - excluded_ids:
+        raise ValueError("Participant manifest must include the full eligible cohort")
     for row in table.itertuples():
         if (
             row.participant_id not in labels.index
@@ -196,9 +185,7 @@ def apply_manifest(dataset, config: dict):
     if not path:
         return dataset
     manifest = load_manifest(path, config)
-    ids = [
-        str(row["participant_id"]) for row in manifest["participants"] if row["role"] != "unused"
-    ]
+    ids = [str(row["participant_id"]) for row in manifest["participants"]]
     indexed = dataset.table.set_index("participant_id", drop=False)
     if not set(ids) <= set(indexed.index):
         raise ValueError("Participant manifest requires inputs missing from the prepared dataset")

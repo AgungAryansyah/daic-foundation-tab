@@ -90,7 +90,7 @@ def load_transcripts(
     manifest = load_manifest(manifest_path, config) if manifest_path else prepare_manifest(config)
     settings = config["data"]["transcripts"]
     root = Path(config["data"]["root"]).expanduser().resolve()
-    selected = [row for row in manifest["participants"] if row["role"] != "unused"]
+    selected = manifest["participants"]
     cache_root = Path(config["project"]["cache_root"]).expanduser() / "transcripts"
     cache_root.mkdir(parents=True, exist_ok=True)
     texts = {}

@@ -54,6 +54,8 @@ def load_config(path: str | Path, *, _validate: bool = True) -> dict[str, Any]:
 
 
 def validate_config(config: Mapping[str, Any]) -> None:
+    if "label_budget" in config.get("study", {}):
+        raise ConfigError("study.label_budget was removed; use the full eligible training cohort")
     input_kind = config.get("input", {}).get("kind", "tabular")
     if input_kind == "transcript":
         from daic_foundation_tab.text_config import validate_text_config

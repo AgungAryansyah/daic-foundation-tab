@@ -27,7 +27,7 @@ def test_frozen_and_finetuned_use_identical_saved_participants(tmp_path):
     icl = prepare_icl_splits(dataset, "audio_visual", "classification", 0.2, 888)
     assert ft.training_x.equals(icl.context_x)
     assert ft.validation_x.equals(icl.reserved_x)
-    assert manifest["label_budget"] == len(ft.training_y) + len(ft.validation_y)
+    assert len(ft.training_y) + len(ft.validation_y) == 6
     assert dataset.partition_manifest == manifest
 
 
@@ -58,26 +58,49 @@ def test_intersection_excludes_missing_transcripts_and_metadata_files(tmp_path):
     ]
 
 
-def test_budget_is_reproducible_and_contains_selection_labels(tmp_path):
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_full_training_cohort_is_reproducible(tmp_path, task):
     config = manifest_config(tmp_path)
-    config["study"] = {"label_budget": 4}
+    config["experiment"]["task"] = task
     assert prepare_manifest(config) == prepare_manifest(config)
     manifest = prepare_manifest(config)
-    assert sum(row["role"] in {"fit", "selection"} for row in manifest["participants"]) == 4
+    assert sum(row["role"] in {"fit", "selection"} for row in manifest["participants"]) == 6
+    assert all(
+        row["role"] in {"fit", "selection", "dev", "test"} for row in manifest["participants"]
+    )
+    assert "label_budget" not in manifest
 
 
-def test_unused_participants_do_not_enter_feature_preparation(tmp_path):
+def test_excluded_participants_do_not_enter_feature_preparation(tmp_path):
     config = manifest_config(tmp_path)
-    config["study"] = {"label_budget": 4}
-    manifest = prepare_manifest(config)
-    unused = next(row["participant_id"] for row in manifest["participants"] if row["role"] == "unused")
-    for path in (tmp_path / "data/data").glob(f"{unused}_*"):
+    for path in (tmp_path / "data/data").glob("305_*"):
         path.unlink()
+    manifest = prepare_manifest(config)
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(manifest))
     config["experiment"]["partition_manifest"] = str(path)
     dataset = build_or_load_dataset(config)
-    assert unused not in set(dataset.table["participant_id"])
+    assert "305" not in set(dataset.table["participant_id"])
+
+
+def test_removed_subsampling_setting_is_rejected(tmp_path):
+    config = manifest_config(tmp_path)
+    config["study"] = {"label_budget": 4}
+    with pytest.raises(ValueError, match="was removed"):
+        prepare_manifest(config)
+
+
+def test_manifest_cannot_silently_omit_eligible_training_participants(tmp_path):
+    config = manifest_config(tmp_path)
+    manifest = prepare_manifest(config)
+    manifest["participants"] = [
+        row for row in manifest["participants"] if row["participant_id"] != "300"
+    ]
+    manifest["manifest_id"] = fingerprint({k: v for k, v in manifest.items() if k != "manifest_id"})
+    path = tmp_path / "incomplete.json"
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="full eligible cohort"):
+        load_manifest(path, config)
 
 
 def test_preparation_reports_progress_from_start(tmp_path):
