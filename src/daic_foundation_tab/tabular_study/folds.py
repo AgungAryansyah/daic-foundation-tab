@@ -35,7 +35,7 @@ def make_folds(table: pd.DataFrame, settings: dict) -> dict:
             else regression_fine_tune_partition
         )
 
-        def partition(indices, seed):
+        def partition(indices, seed, partitioner=partitioner, target=target):
             result = partitioner(
                 target.iloc[indices].reset_index(drop=True),
                 ids.iloc[indices].reset_index(drop=True),
