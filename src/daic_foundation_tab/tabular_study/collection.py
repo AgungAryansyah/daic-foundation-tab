@@ -232,5 +232,12 @@ def collect_study(
         rows = _write_condition_metrics(results, destination, stage)
         _write_runtime_summary(rows, destination)
         if stage == "cv":
-            _write_cv_summaries(context, results, destination)
+            from daic_foundation_tab.tabular_study.comparisons import write_cv_comparisons
+
+            oof = _write_cv_summaries(context, results, destination)
+            write_cv_comparisons(context[0], results, oof, destination, logger)
+        else:
+            from daic_foundation_tab.tabular_study.comparisons import write_final_comparisons
+
+            write_final_comparisons(results, destination)
     return destination

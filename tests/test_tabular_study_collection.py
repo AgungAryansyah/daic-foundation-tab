@@ -34,6 +34,13 @@ def test_collects_distributed_results_and_rejects_incomplete_or_conflicting_atte
     assert coverage["status"] == "completed" and coverage["completed"] == 120
     assert len(pd.read_csv(report / "condition_metrics.csv")) == 120
     assert len(list((report / "oof_predictions").glob("*.csv"))) == 24
+    pairs = pd.read_csv(report / "cv_paired_oof.csv")
+    fold_pairs = pd.read_csv(report / "cv_fold_differences.csv")
+    assert len(pairs.loc[pairs["metric"] == "macro_f1"]) == 6
+    assert len(pairs.loc[pairs["metric"] == "mae"]) == 6
+    assert len(fold_pairs.loc[fold_pairs["metric"] == "macro_f1"]) == 30
+    assert len(fold_pairs.loc[fold_pairs["metric"] == "mae"]) == 30
+    assert pairs["delta_ft_minus_icl"].eq(0).all()
     summary = pd.read_csv(report / "cv_summary.csv")
     assert summary["participants"].eq(30).all()
     assert summary["valid_folds"].max() == 5
