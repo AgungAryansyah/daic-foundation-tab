@@ -247,7 +247,7 @@ def run_text_experiment(config: dict) -> Path:
                                 ]
                             ),
                         )
-                        tracker.metrics(split, metrics)
+                        tracker.metrics("development" if split == "dev" else split, metrics)
             metadata = model.run_metadata()
             runtime = {
                 "fit_seconds": fit_seconds,
@@ -258,6 +258,8 @@ def run_text_experiment(config: dict) -> Path:
             }
             artifacts.json("runtime.json", runtime)
             artifacts.json("model_metadata.json", metadata)
+            tracker.metrics("runtime", runtime)
+            tracker.metrics("model", metadata)
             record.update(model=metadata, runtime=runtime)
             artifacts.text(
                 "summary.md",

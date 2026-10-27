@@ -164,6 +164,18 @@ def test_sanitized_config_excludes_local_paths() -> None:
     assert "pattern" not in config["data"]["source_groups"]["covarep"]
 
 
+def test_matched_study_uses_shared_group_and_safe_identity(monkeypatch, tmp_path):
+    fake = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake)
+    config = _config()
+    config["tracking"]["wandb"]["group"] = "matched-classification"
+    config["study"] = {"manifest_id": "hash", "partition_manifest": "/private/manifest.json"}
+    artifacts = RunArtifacts(tmp_path, "model", "audio", 42)
+    WandbTracker.start(config, artifacts, _validation(), "cache")
+    assert fake.init_arguments["group"] == "matched-classification"
+    assert fake.init_arguments["config"]["study"] == {"manifest_id": "hash"}
+
+
 def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeypatch, tmp_path) -> None:
     fake_wandb = _FakeWandb()
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)

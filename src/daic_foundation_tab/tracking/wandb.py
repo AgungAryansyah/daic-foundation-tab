@@ -57,6 +57,8 @@ def _redact_paths(value: Any) -> Any:
 
 
 def _study_id(config: Mapping[str, Any]) -> str:
+    if config.get("tracking", {}).get("wandb", {}).get("group"):
+        return str(config["tracking"]["wandb"]["group"])
     data = config["data"]
     source_groups = data.get("source_groups", {})
     payload = {
@@ -97,6 +99,11 @@ def sanitized_wandb_config(
         "aggregation": _json_value(config["aggregation"]),
         "evaluation": _json_value(config["evaluation"]),
         "bootstrap": _json_value(config["bootstrap"]),
+        "study": {
+            key: config.get("study", {})[key]
+            for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs")
+            if key in config.get("study", {})
+        },
         "data": {
             "cache_key": dataset_cache_key,
             "study_id": study_id,
