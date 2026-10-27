@@ -42,6 +42,8 @@ def _parser() -> argparse.ArgumentParser:
     study = subparsers.add_parser("prepare-matched-study")
     study.add_argument("--config", required=True, type=Path)
     study.add_argument("--output", required=True, type=Path)
+    run_study = subparsers.add_parser("run-matched-study")
+    run_study.add_argument("--study", required=True, type=Path)
     collect = subparsers.add_parser("collect-test-results")
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     collect_regression = subparsers.add_parser("collect-regression-test-results")
@@ -171,6 +173,11 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "run-matched-study":
+        from daic_foundation_tab.study_runner import run_study
+
+        print(run_study(args.study))
+        return
     if args.command == "prepare-matched-study":
         from daic_foundation_tab.matched_study import prepare_study
 
