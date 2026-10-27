@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from copy import deepcopy
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +35,16 @@ def _sync(device: str) -> None:
     import torch
 
     torch.cuda.synchronize(device)
+
+
+def _dependency_versions() -> dict:
+    versions = {}
+    for package in ("numpy", "pandas", "pyarrow", "scikit-learn", "torch", "tabpfn", "structured-data-models"):
+        try:
+            versions[package] = version(package)
+        except PackageNotFoundError:
+            versions[package] = None
+    return versions
 
 
 def _timed(device, function, *args, **kwargs):
@@ -134,7 +145,8 @@ def run_condition(bundle: str | Path, condition: dict, host: dict, attempt_id: s
             set_global_seed(condition["model_seed"])
             reset_cuda_peak_memory(device)
             environment = environment_metadata(device)
-            environment.update(git_commit=_git_commit(), host_label=config["study"]["host_label"])
+            environment.update(git_commit=_git_commit(), host_label=config["study"]["host_label"],
+                               dependency_versions=_dependency_versions())
             artifacts.json("environment.json", environment)
             table["participant_id"] = table["participant_id"].astype(str)
             if table["participant_id"].duplicated().any():
