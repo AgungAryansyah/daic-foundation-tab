@@ -4,6 +4,7 @@ import shutil
 import pandas as pd
 import pytest
 
+from daic_foundation_tab.tabular_study import condition as execution
 from daic_foundation_tab.tabular_study.bundle import read_bundle
 from daic_foundation_tab.tabular_study.collection import collect_study
 from daic_foundation_tab.tabular_study.condition import run_condition
@@ -61,3 +62,18 @@ def test_collects_distributed_results_and_rejects_incomplete_or_conflicting_atte
         row["status"]
         for row in json.loads((tmp_path / "conflict/coverage.json").read_text())["conditions"]
     }
+
+
+def test_collection_rejects_inconsistent_pretrained_checkpoints(prepared, tmp_path, monkeypatch):
+    bundle, _ = prepared
+    context = read_bundle(bundle)
+    monkeypatch.setattr(execution, "_source_checkpoint_hash",
+                        lambda condition, detail: ("a" if condition["mode"] == "frozen_icl" else "b") * 64)
+    root = tmp_path / "runs"
+    items = [x for x in context[0]["conditions"]["cv"] if x["family"] == "tabpfn35"
+             and x["modality"] == "audio" and x["task"] == "classification" and x["fold"] == 1]
+    for index, item in enumerate(items):
+        output = run_condition(bundle, item, {"output_root": str(root)}, f"attempt-{index}")
+        write_result(context, item, output)
+    with pytest.raises(ValueError, match="checkpoints differ"):
+        collect_study(bundle, [root], tmp_path / "report", allow_partial=True)

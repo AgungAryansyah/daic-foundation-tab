@@ -43,6 +43,7 @@ def _discover(context: tuple, roots: list[Path], stage: str, logger) -> tuple[di
     with phase(logger, "verifying condition results") as started:
         log_progress(logger, "verifying condition results", 0, len(paths), started)
         versions = None
+        source_hashes = {}
         for completed, path in enumerate(paths, 1):
             candidate = json.loads(path.read_text())
             if (
@@ -50,6 +51,12 @@ def _discover(context: tuple, roots: list[Path], stage: str, logger) -> tuple[di
                 and candidate.get("condition", {}).get("stage") == stage
             ):
                 result = verify_result(context, path.parent)
+                identity = (result["condition"]["family"], result["condition"]["task"])
+                record = json.loads((path.parent / "study_run.json").read_text())
+                source_hash = record["source_checkpoint_sha256"]
+                if identity in source_hashes and source_hashes[identity] != source_hash:
+                    raise ValueError("Source model checkpoints differ across results")
+                source_hashes[identity] = source_hash
                 condition_id = result["condition"]["condition_id"]
                 digest = file_hash(path)
                 if condition_id in results:

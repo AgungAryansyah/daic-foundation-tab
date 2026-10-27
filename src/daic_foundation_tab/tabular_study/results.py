@@ -115,6 +115,21 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
     ):
         raise ValueError("Result lifecycle provenance mismatch")
     saved_config = yaml.safe_load((output / "config_resolved.yaml").read_text())
+    detail = json.loads((output / "adaptation_metadata.json").read_text())
+    source_hash = detail.get("source_checkpoint_sha256")
+    if not isinstance(source_hash, str) or len(source_hash) != 64 or record.get("source_checkpoint_sha256") != source_hash:
+        raise ValueError("Result source checkpoint provenance is invalid")
+    if (saved_config["experiment"]["task"] != condition["task"]
+            or saved_config["experiment"]["mode"] != condition["mode"]
+            or saved_config["experiment"]["feature_set"] != condition["modality"]
+            or saved_config["project"]["seed"] != condition["model_seed"]):
+        raise ValueError("Result experiment settings differ from the prepared condition")
+    tracking = saved_config["tracking"]["wandb"]
+    saved_tracking = json.loads((output / "wandb_run.json").read_text())
+    if tracking["enabled"] and tracking["mode"] != "disabled" and (
+        saved_tracking.get("status") != "finished" or not saved_tracking.get("run_id")
+    ):
+        raise ValueError("Result W&B tracking did not finish")
     expected_model = study["configuration"]["profiles"][
         f"{condition['family']}:{condition['task']}:{condition['mode']}"
     ]

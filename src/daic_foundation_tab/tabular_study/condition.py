@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import tomllib
 from copy import deepcopy
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -45,6 +46,32 @@ def _dependency_versions() -> dict:
         except PackageNotFoundError:
             versions[package] = None
     return versions
+
+
+def _check_dependencies(versions: dict) -> None:
+    root = Path(__file__).resolve().parents[3]
+    lock = tomllib.loads((root / "uv.lock").read_text())
+    expected = {item["name"]: item["version"] for item in lock["package"] if item["name"] in versions}
+    if expected != versions:
+        raise ValueError("Installed study dependencies do not match uv.lock")
+
+
+def _source_checkpoint_hash(condition: dict, detail: dict) -> str:
+    if condition["mode"] == "frozen_icl":
+        digest = detail["checkpoint_sha256"]
+    elif condition["family"] == "kumo_medium":
+        digest = detail["source_checkpoint_sha256"]
+    else:
+        from tabpfn.model_loading import resolve_model_path
+
+        which = "classifier" if condition["task"] == "classification" else "regressor"
+        paths, _, _, _ = resolve_model_path(None, which=which, version="v3.5")
+        if len(paths) != 1 or not paths[0].is_file():
+            raise ValueError("TabPFN source checkpoint is unavailable after training")
+        digest = file_hash(paths[0])
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ValueError("Source checkpoint hash is invalid")
+    return digest
 
 
 def _timed(device, function, *args, **kwargs):
@@ -147,6 +174,7 @@ def run_condition(bundle: str | Path, condition: dict, host: dict, attempt_id: s
             environment = environment_metadata(device)
             environment.update(git_commit=_git_commit(), host_label=config["study"]["host_label"],
                                dependency_versions=_dependency_versions())
+            _check_dependencies(environment["dependency_versions"])
             artifacts.json("environment.json", environment)
             table["participant_id"] = table["participant_id"].astype(str)
             if table["participant_id"].duplicated().any():
@@ -288,6 +316,11 @@ def run_condition(bundle: str | Path, condition: dict, host: dict, attempt_id: s
                         "context_setup_seconds": context_seconds,
                     },
                 )
+            source_hash = _source_checkpoint_hash(condition, model_detail)
+            model_detail["source_checkpoint_sha256"] = source_hash
+            record.update(source_checkpoint_sha256=source_hash)
+            tracker.results["model_provenance"] = {"source_checkpoint_sha256": source_hash}
+            tracker._log("model_provenance", {"source_checkpoint_sha256": source_hash})
             artifacts.json("adaptation_metadata.json", model_detail)
             predict_seconds = 0.0
             for role in ["evaluation"] if condition["stage"] == "cv" else ["dev", "test"]:

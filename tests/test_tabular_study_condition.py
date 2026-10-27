@@ -72,6 +72,7 @@ def prepared(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(execution, "environment_metadata", lambda device: {"gpu_name": "synthetic"})
     monkeypatch.setattr(execution, "_sync", lambda device: None)
+    monkeypatch.setattr(execution, "_source_checkpoint_hash", lambda condition, detail: "a" * 64)
     return bundle, calls
 
 
@@ -123,3 +124,28 @@ def test_final_stage_scores_test_only_after_prediction(prepared, tmp_path):
     assert (output / "metrics_dev.json").is_file()
     assert (output / "metrics_test.json").is_file()
     assert not (output / "metrics_cv.json").exists()
+
+
+def test_dependency_check_rejects_version_changes():
+    versions = execution._dependency_versions()
+    execution._check_dependencies(versions)
+    versions["torch"] = "different"
+    with pytest.raises(ValueError, match="uv.lock"):
+        execution._check_dependencies(versions)
+
+
+def test_cv_wandb_offline_tracks_aggregate_metrics_without_participants(prepared, tmp_path, monkeypatch):
+    monkeypatch.setenv("WANDB_SILENT", "true")
+    bundle, _ = prepared
+    condition = next(x for x in verify_bundle(bundle)["conditions"]["cv"]
+                     if x["mode"] == "fine_tuning" and x["fold"] == 1)
+    output = execution.run_condition(bundle, condition,
+        {"output_root": str(tmp_path / "runs"), "wandb": {"mode": "offline"}}, "attempt")
+    tracking = json.loads((output / "wandb_run.json").read_text())
+    assert tracking["status"] == "finished" and tracking["run_id"]
+    research = output / "wandb_research"
+    settings = json.loads((research / "settings.json").read_text())
+    results = json.loads((research / "results.json").read_text())
+    assert settings["study"]["fold"] == 1
+    assert "macro_f1" in results["cv"] and "total_seconds" in results["runtime"]
+    assert "participant_id" not in "\n".join(path.read_text() for path in research.iterdir())
