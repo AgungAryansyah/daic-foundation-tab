@@ -1,0 +1,21 @@
+extends: ../base.yaml
+
+data:
+  dataset_id: daic_woz
+  transcripts:
+    pattern: data/{participant_id}_TRANSCRIPT.csv
+    delimiter: "\t"
+    columns:
+      speaker: speaker
+      text: value
+    speaker_policy: participant_only
+    participant_speakers: [Participant]
+    interviewer_speakers: [Ellie, Interviewer]
+
+matched_study:
+  name: daic-woz-matched-adaptation
+  tabular_profiles: ../models
+  text_profile: ../examples/qwen35_2b/base.yaml
+  text_max_length: 32768
+  demonstrations: 2
+  text_epochs: 5

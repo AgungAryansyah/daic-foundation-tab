@@ -39,6 +39,9 @@ def _parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser("prepare-participants")
     prepare.add_argument("--config", required=True, type=Path)
     prepare.add_argument("--output", required=True, type=Path)
+    study = subparsers.add_parser("prepare-matched-study")
+    study.add_argument("--config", required=True, type=Path)
+    study.add_argument("--output", required=True, type=Path)
     collect = subparsers.add_parser("collect-test-results")
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     collect_regression = subparsers.add_parser("collect-regression-test-results")
@@ -168,6 +171,11 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "prepare-matched-study":
+        from daic_foundation_tab.matched_study import prepare_study
+
+        print(prepare_study(args.config, args.output))
+        return
     if args.command == "compare-paired":
         from daic_foundation_tab.evaluation.paired import paired_comparison
 
