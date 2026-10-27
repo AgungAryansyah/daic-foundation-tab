@@ -2,6 +2,7 @@
 
 The repository keeps separate model execution paths and shares participant selection, prediction formats, metrics, and run records.
 Existing tabular configurations retain their defaults.
+The study compares frozen ICL and fine-tuning on fixed participant cohorts for depression classification and PHQ-8 score prediction.
 
 ## Model boundaries
 
@@ -30,12 +31,11 @@ The index selects their availability intersection and records excluded participa
 Tabular availability requires the configured numeric source groups.
 Use `study.feature_set` to select audio, visual, or combined availability.
 
-`study.label_budget` counts fit/context and internal selection participants together.
-The default budget includes all available official training participants.
-Classification uses stratified selection. Score prediction uses seeded random selection.
-The manifest records `fit`, `selection`, `unused`, `dev`, and `test` roles.
+Each split uses all eligible official training participants, divided into fit/context and internal selection groups.
+Classification uses a stratified split. Score prediction uses a seeded random split.
+The manifest records `fit`, `selection`, `dev`, and `test` roles.
 
-Prepare one manifest per task, budget, and seed.
+Prepare one manifest per task, cohort, and seed.
 Set `experiment.partition_manifest` to the same file in every corresponding model configuration.
 The loader checks its fingerprint, dataset identity, labels, and official splits.
 Feature preparation applies the selected cohort before aggregation.
@@ -44,7 +44,7 @@ Frozen tabular models use the fit pool as context.
 Qwen selects the configured demonstration count from that pool.
 Frozen methods reserve internal selection participants without using their labels for checkpoint selection.
 Fine-tuning uses selection participants for checkpoint selection.
-Run records distinguish the available budget, fit pool, selection pool, and actual Qwen demonstration count.
+Run records distinguish the fit pool, selection pool, and actual Qwen demonstration count.
 
 ## Transcript and output contracts
 
@@ -96,7 +96,7 @@ Text runs also retain raw answers and prompt token counts locally.
 W&B receives an explicit metadata allowlist and finite scalar metrics.
 It does not receive transcripts, participant IDs, or raw answers.
 
-`compare-paired` requires completed runs with matching dataset, task, manifest, cohort, budget, and observed targets.
+`compare-paired` requires completed runs with matching dataset, task, manifest, cohort, and observed targets.
 Its bootstrap resamples identical participants for both systems.
 Differences use right minus left. Intervals describe uncertainty conditional on the saved predictions.
 They do not include variation from retraining.
