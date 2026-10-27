@@ -21,10 +21,12 @@ class FakeTextModel:
     def preflight(self, examples):
         pass
 
-    def fit(self, training, validation, checkpoint_directory, progress, resume=False):
+    def fit(self, training, validation, checkpoint_directory, progress, resume=False,
+            epoch_callback=None):
         assert all(item.target is not None for item in [*training, *validation])
         self.steps = 1
         progress(1, 1)
+        epoch_callback({"epoch": 1, "train/mean_loss": 0.5, "optimizer_steps": 1})
 
     def predict(self, examples):
         assert all(item.target is None for item in examples)
@@ -87,6 +89,9 @@ def test_text_execution_preserves_schema_and_records_completed_run(
     assert table["participant_id"].tolist() == [500, 501]
     assert "I feel tired" not in (output / "study_run.json").read_text()
     assert "I feel tired" not in (output / "config_resolved.yaml").read_text()
+    if mode == "fine_tuning":
+        history = json.loads((output / "training_history.jsonl").read_text())
+        assert history == {"epoch": 1, "train/mean_loss": 0.5, "optimizer_steps": 1}
 
 
 def test_failed_run_can_resume_and_rejects_changed_settings(tmp_path, monkeypatch):

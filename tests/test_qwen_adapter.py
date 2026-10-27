@@ -69,8 +69,14 @@ def test_lora_updates_only_adapters_and_reload_reproduces_predictions(tmp_path):
     adapter = tiny_adapter(tmp_path, mode="fine_tuning")
     original = [(parameter, parameter.detach().clone()) for parameter in adapter.model.parameters()]
     validation = [TextExample("dev0", "Tired", 0), TextExample("dev1", "Well", 1)]
-    adapter.fit(examples(), validation, tmp_path / "checkpoints")
+    history = []
+    adapter.fit(examples(), validation, tmp_path / "checkpoints", epoch_callback=history.append)
     assert adapter.optimizer_steps == 2
+    assert history[0]["epoch"] == 1
+    assert history[0]["optimizer_steps"] == 2
+    assert history[0]["train/mean_loss"] > 0
+    assert history[0]["train/examples_observed"] == 2
+    assert 0 <= history[0]["val/roc_auc"] <= 1
     assert all(torch.equal(parameter, old) for parameter, old in original)
     assert any(
         "lora_B" in name and torch.count_nonzero(parameter) > 0

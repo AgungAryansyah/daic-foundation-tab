@@ -33,6 +33,7 @@ class TextModel(Protocol):
         checkpoint_directory: Path,
         progress: Callable[[int, int], None] | None = None,
         resume: bool = False,
+        epoch_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> Self: ...
 
     def predict(self, examples: Sequence[TextExample]) -> list[TextPrediction]: ...

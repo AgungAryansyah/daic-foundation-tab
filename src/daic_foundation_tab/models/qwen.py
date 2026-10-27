@@ -153,7 +153,8 @@ class QwenTextModel:
             )["roc_auc"]
         return regression_metrics(target, [item.value for item in predictions])["mae"]
 
-    def fit(self, training, validation, checkpoint_directory: Path, progress=None, resume=False):
+    def fit(self, training, validation, checkpoint_directory: Path, progress=None, resume=False,
+            epoch_callback=None):
         import torch
         from peft import LoraConfig, PeftModel, get_peft_model
 
@@ -265,6 +266,7 @@ class QwenTextModel:
             )
             self.model.train()
             optimizer.zero_grad(set_to_none=True)
+            losses = []
             for position in range(offset, len(order)):
                 record = records[order[position]]
                 batch = {key: self._tensor(value) for key, value in record.items()}
@@ -273,6 +275,7 @@ class QwenTextModel:
                 loss = self.model(**batch, use_cache=False).loss
                 if not torch.isfinite(loss):
                     raise ValueError("Non-finite adapter training loss")
+                losses.append(float(loss.detach()))
                 (loss / group_size).backward()
                 if (position + 1) % accumulation == 0 or position + 1 == len(order):
                     torch.nn.utils.clip_grad_norm_(trainable, 1.0, error_if_nonfinite=True)
@@ -295,6 +298,16 @@ class QwenTextModel:
                 self.best_metric = metric
                 self.model.save_pretrained(directory / "best_adapter")
             save(epoch + 1, 0)
+            if epoch_callback:
+                epoch_callback({
+                    "epoch": epoch + 1,
+                    "optimizer_steps": self.optimizer_steps,
+                    "train/mean_loss": sum(losses) / len(losses) if losses else None,
+                    "train/examples_observed": len(losses),
+                    "train/learning_rate": optimizer.param_groups[0]["lr"],
+                    "val/roc_auc" if self.task == "classification" else "val/mae": metric,
+                    "best_validation_metric": self.best_metric,
+                })
             offset = 0
         if not (directory / "best_adapter" / "adapter_config.json").is_file():
             raise ValueError("The selected adapter checkpoint is missing")

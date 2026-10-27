@@ -137,6 +137,11 @@ def run_text_experiment(config: dict) -> Path:
                         log_progress(logger, "training adapters", completed, total, phase_started)
                         record.update(completed_steps=completed, total_steps=total)
 
+                    def training_epoch(metrics):
+                        with (artifacts.path / "training_history.jsonl").open("a") as history:
+                            history.write(json.dumps(metrics) + "\n")
+                        tracker.metrics("fine_tuning", metrics)
+
                     checkpoint_directory = artifacts.path / "checkpoints"
                     resume_checkpoint = (
                         bool(config.get("_resume_directory"))
@@ -150,6 +155,7 @@ def run_text_experiment(config: dict) -> Path:
                         checkpoint_directory,
                         training_progress,
                         resume=resume_checkpoint,
+                        epoch_callback=training_epoch,
                     )
                 fit_seconds = time.perf_counter() - phase_started
             predict_seconds = 0.0
