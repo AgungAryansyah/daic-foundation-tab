@@ -1,0 +1,56 @@
+import json
+import shutil
+
+import pandas as pd
+import pytest
+
+from daic_foundation_tab.tabular_study.bundle import read_bundle
+from daic_foundation_tab.tabular_study.collection import collect_study
+from daic_foundation_tab.tabular_study.condition import run_condition
+from daic_foundation_tab.tabular_study.results import write_result
+
+pytest_plugins = ["tests.test_tabular_study_condition"]
+
+
+def test_collects_distributed_results_and_rejects_incomplete_or_conflicting_attempts(
+    prepared, tmp_path
+):
+    bundle, _ = prepared
+    context = read_bundle(bundle)
+    roots = [tmp_path / "machine-a", tmp_path / "machine-b"]
+    first_output = None
+    for index, item in enumerate(context[0]["conditions"]["cv"]):
+        root = roots[index % 2]
+        output = run_condition(
+            bundle,
+            item,
+            {"output_root": str(root), "host_label": f"host-{index % 2}"},
+            f"attempt-{index}",
+        )
+        write_result(context, item, output)
+        first_output = first_output or output
+    report = collect_study(bundle, roots, tmp_path / "report")
+    coverage = json.loads((report / "coverage.json").read_text())
+    assert coverage["status"] == "completed" and coverage["completed"] == 120
+    assert len(pd.read_csv(report / "condition_metrics.csv")) == 120
+    assert len(list((report / "oof_predictions").glob("*.csv"))) == 24
+    summary = pd.read_csv(report / "cv_summary.csv")
+    assert summary["participants"].eq(30).all()
+    assert summary["valid_folds"].max() == 5
+    copy = tmp_path / "copied"
+    shutil.copytree(first_output, copy, ignore=shutil.ignore_patterns("checkpoints"))
+    partial = collect_study(bundle, [copy], tmp_path / "partial", allow_partial=True)
+    assert json.loads((partial / "coverage.json").read_text())["status"] == "incomplete"
+    assert not list((partial / "oof_predictions").glob("*.csv"))
+    with pytest.raises(ValueError, match="incomplete"):
+        collect_study(bundle, [copy], tmp_path / "strict")
+    duplicate = tmp_path / "duplicate"
+    item = context[0]["conditions"]["cv"][0]
+    another = run_condition(bundle, item, {"output_root": str(duplicate)}, "another-attempt")
+    write_result(context, item, another)
+    with pytest.raises(ValueError, match="Conflicting"):
+        collect_study(bundle, [first_output, duplicate], tmp_path / "conflict", allow_partial=True)
+    assert "conflicting" in {
+        row["status"]
+        for row in json.loads((tmp_path / "conflict/coverage.json").read_text())["conditions"]
+    }

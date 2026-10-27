@@ -54,6 +54,12 @@ def _parser() -> argparse.ArgumentParser:
     run_tabular.add_argument("--modality", required=True, choices=["audio", "visual", "audio_visual"])
     run_tabular.add_argument("--host-config", required=True, type=Path)
     run_tabular.add_argument("--stage", default="cv", choices=["cv", "final"])
+    collect_tabular = subparsers.add_parser("collect-tabular-study")
+    collect_tabular.add_argument("--study", required=True, type=Path)
+    collect_tabular.add_argument("--runs", required=True, nargs="+", type=Path)
+    collect_tabular.add_argument("--output", required=True, type=Path)
+    collect_tabular.add_argument("--stage", default="cv", choices=["cv", "final"])
+    collect_tabular.add_argument("--allow-partial", action="store_true")
     collect = subparsers.add_parser("collect-test-results")
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     collect_regression = subparsers.add_parser("collect-regression-test-results")
@@ -183,6 +189,12 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "collect-tabular-study":
+        from daic_foundation_tab.tabular_study.collection import collect_study
+
+        print(collect_study(args.study, args.runs, args.output, stage=args.stage,
+                            allow_partial=args.allow_partial))
+        return
     if args.command == "prepare-tabular-study":
         from daic_foundation_tab.tabular_study.bundle import prepare_bundle
 
