@@ -11,6 +11,8 @@ Both binary classification and generated PHQ-8 scores use shared participant man
 The tabular runners retain their current defaults.
 See [the architecture and usage guide](docs/architecture.md) for interfaces, validation examples, checkpoint resume, and paired comparisons.
 The examples do not define research campaigns.
+The [matched DAIC-WOZ study](docs/matched-study.md) defines 16 conditions across all four models,
+both adaptation methods, and both prediction tasks. It enables W&B tracking and uses shared participant splits.
 
 ## Remote environment
 

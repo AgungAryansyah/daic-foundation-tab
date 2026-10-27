@@ -141,4 +141,5 @@ rtk proxy env DAIC_QWEN_SMOKE=1 uv run --extra text pytest -q tests/test_smoke_q
 To add another language model, implement `TextModel` and register its capabilities and factory.
 Keep model-specific loading and formatting inside the adapter.
 Reuse the participant manifest, output contracts, metrics, and lifecycle.
-Additional experiment matrices, model families, severity bins, and text-feature fusion remain future work.
+The [matched DAIC-WOZ campaign](matched-study.md) runs the four existing families with shared participant splits.
+Additional model families, severity bins, and text-feature fusion remain future work.
