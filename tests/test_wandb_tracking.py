@@ -176,6 +176,26 @@ def test_matched_study_uses_shared_group_and_safe_identity(monkeypatch, tmp_path
     assert fake.init_arguments["config"]["study"] == {"manifest_id": "hash"}
 
 
+def test_cv_tracking_uses_explicit_fold_roles_and_safe_metadata(monkeypatch, tmp_path):
+    fake = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake)
+    config = _config()
+    config["study"] = {"stage": "cv", "fold": 3, "model_seed": 42,
+                       "condition_id": "abc", "private": "PRIVATE"}
+    validation = _validation()
+    validation["reported_splits"] = ["fit", "selection", "evaluation"]
+    validation["split_statistics"] = {
+        role: {"participants": count} for role, count in (("fit", 60), ("selection", 20), ("evaluation", 20))
+    }
+    artifacts = RunArtifacts(tmp_path, "tabpfn35_ft", "audio_visual", 42)
+    tracker = WandbTracker.start(config, artifacts, validation, "cache-key")
+    tracker.record_cv({"macro_f1": 0.75})
+    assert fake.run.summary["cv/macro_f1"] == 0.75
+    assert set(tracker.data_card["splits"]) == {"fit", "selection", "evaluation"}
+    assert fake.init_arguments["config"]["study"]["fold"] == 3
+    assert "PRIVATE" not in str(fake.init_arguments)
+
+
 def test_tracker_prioritizes_metrics_and_keeps_cohort_counts_in_artifact(monkeypatch, tmp_path) -> None:
     fake_wandb = _FakeWandb()
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)

@@ -101,7 +101,9 @@ def sanitized_wandb_config(
         "bootstrap": _json_value(config["bootstrap"]),
         "study": {
             key: config.get("study", {})[key]
-            for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs")
+            for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs", "stage",
+                        "condition_id", "group_id", "fold", "model_seed", "fold_seed",
+                        "selection_seed", "attempt_id", "host_label", "software_identity")
             if key in config.get("study", {})
         },
         "data": {
@@ -143,7 +145,7 @@ def _cohort_card(
                     else {}
                 ),
             }
-            for split in ("train", "dev", "test")
+            for split in validation.get("reported_splits", ("train", "dev", "test"))
         },
         "exclusions": {
             split: {field: exclusions[split].get(field) for field in _EXCLUSION_FIELDS}
@@ -266,6 +268,7 @@ class WandbTracker:
                 str(mode),
                 run_type,
                 *settings["tags"],
+                *([str(config["study"]["stage"])] if config.get("study", {}).get("stage") else []),
             ]
             tracker.sdk = wandb
             tracker.run = wandb.init(
@@ -413,6 +416,12 @@ class WandbTracker:
         test = {key.removeprefix("/"): value for key, value in scalar_metrics.items()}
         self.results["test"] = test
         self._log("test", test)
+
+    def record_cv(self, metrics: Mapping[str, Any]) -> None:
+        scalar_metrics = _scalar_values("", metrics)
+        values = {key.removeprefix("/"): value for key, value in scalar_metrics.items()}
+        self.results["cv"] = values
+        self._log("cv", values)
 
     def record_bootstrap(self, summary: Mapping[str, Any]) -> None:
         self.results["bootstrap"] = _json_value(summary)
