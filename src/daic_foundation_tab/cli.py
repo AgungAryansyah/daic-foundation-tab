@@ -44,6 +44,16 @@ def _parser() -> argparse.ArgumentParser:
     study.add_argument("--output", required=True, type=Path)
     run_study = subparsers.add_parser("run-matched-study")
     run_study.add_argument("--study", required=True, type=Path)
+    prepare_tabular = subparsers.add_parser("prepare-tabular-study")
+    prepare_tabular.add_argument("--config", required=True, type=Path)
+    prepare_tabular.add_argument("--output", required=True, type=Path)
+    prepare_tabular.add_argument("--reuse-data", type=Path)
+    run_tabular = subparsers.add_parser("run-tabular-study")
+    run_tabular.add_argument("--study", required=True, type=Path)
+    run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
+    run_tabular.add_argument("--modality", required=True, choices=["audio", "visual", "audio_visual"])
+    run_tabular.add_argument("--host-config", required=True, type=Path)
+    run_tabular.add_argument("--stage", default="cv", choices=["cv", "final"])
     collect = subparsers.add_parser("collect-test-results")
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     collect_regression = subparsers.add_parser("collect-regression-test-results")
@@ -173,6 +183,16 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "prepare-tabular-study":
+        from daic_foundation_tab.tabular_study.bundle import prepare_bundle
+
+        print(prepare_bundle(args.config, args.output, reuse=args.reuse_data))
+        return
+    if args.command == "run-tabular-study":
+        from daic_foundation_tab.tabular_study.groups import run_group
+
+        print(run_group(args.study, args.model, args.modality, args.host_config, stage=args.stage))
+        return
     if args.command == "run-matched-study":
         from daic_foundation_tab.study_runner import run_study
 
