@@ -1,12 +1,14 @@
 import json
 from copy import deepcopy
 
+import pandas as pd
 import pytest
 
 from daic_foundation_tab.tabular_study import bundle as bundles
 from daic_foundation_tab.tabular_study import condition as execution
 from daic_foundation_tab.tabular_study import revisions
 from daic_foundation_tab.tabular_study.bundle import read_bundle, verify_bundle
+from daic_foundation_tab.tabular_study.collection import collect_study
 from daic_foundation_tab.tabular_study.results import verify_result, write_result
 
 pytest_plugins = ["tests.test_tabular_study_condition"]
@@ -46,6 +48,10 @@ def test_revision_preserves_old_results_and_records_new_source(prepared, tmp_pat
     assert result["software_identity"] == identity != original["software_identity"]
     lifecycle = json.loads((new_output / "study_run.json").read_text())
     assert lifecycle["software_revision_id"] == record["revision_id"]
+    report = collect_study(directory, [tmp_path / "runs"], tmp_path / "report", allow_partial=True)
+    metrics = pd.read_csv(report / "condition_metrics.csv")
+    assert set(metrics["software_identity"]) == {identity, original["software_identity"]}
+    assert json.loads((report / "software_provenance.json").read_text())["execution_revisions"][identity]["reason"] == "AMP overflow recovery"
     assert (directory / "study.json").read_bytes() == original_definition
     assert revisions.register_revision(directory, "baseline", [MODEL_PATH], "same revision") == record
     manifest = json.loads((directory / revisions.FILENAME).read_text())

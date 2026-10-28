@@ -118,6 +118,8 @@ def _write_condition_metrics(results: dict, destination: Path, stage: str) -> li
             "host_label": environment.get("host_label"),
             "gpu_name": environment.get("gpu_name"),
             "gpu_vram_bytes": environment.get("total_gpu_vram_bytes"),
+            "software_identity": value["result"]["software_identity"],
+            "git_commit": environment.get("git_commit"),
         }
         for split in ("cv",) if stage == "cv" else ("dev", "test"):
             metrics_path = path / f"metrics_{split}.json"
@@ -160,6 +162,8 @@ def _write_cv_summaries(context: tuple, results: dict, destination: Path) -> dic
             fold = item["result"]["condition"]["fold"]
             frame = pd.read_csv(item["path"] / "predictions_cv.csv", dtype={"participant_id": str})
             frame["fold"] = fold
+            frame["software_identity"] = item["result"]["software_identity"]
+            frame["git_commit"] = item["environment"].get("git_commit")
             frames.append(frame)
             fold_metrics.append(
                 _scalars(json.loads((item["path"] / "metrics_cv.json").read_text()))
@@ -229,6 +233,10 @@ def collect_study(
     destination.mkdir(parents=True, exist_ok=True)
     logger = configure_run_logger(destination / "collect.log", "INFO")
     results, attempts, conflicts = _discover(context, roots, stage, logger)
+    _json(destination / "software_provenance.json", {
+        "baseline_software_identity": context[0]["software_identity"],
+        "execution_revisions": context[0].get("_execution_revisions", {}),
+    })
     coverage = _coverage(context[0], stage, results, attempts, conflicts)
     missing = [row for row in coverage if row["status"] != "completed"]
     coverage_report = {
