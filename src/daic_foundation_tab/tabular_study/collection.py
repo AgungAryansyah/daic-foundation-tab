@@ -34,6 +34,7 @@ def _metrics(task: str, table: pd.DataFrame) -> dict:
 def _discover(context: tuple, roots: list[Path], stage: str, logger) -> tuple[dict, dict, list]:
     study = context[0]
     results, attempts, conflicts = {}, {}, []
+    expected_ids = {item["condition_id"] for item in study["conditions"][stage]}
     paths = sorted({path.resolve() for root in roots for path in root.rglob("result.json")})
     status_paths = sorted({path.resolve() for root in roots for path in root.rglob("status.json")})
     for path in status_paths:
@@ -49,6 +50,7 @@ def _discover(context: tuple, roots: list[Path], stage: str, logger) -> tuple[di
             if (
                 candidate.get("study_id") == study["study_id"]
                 and candidate.get("condition", {}).get("stage") == stage
+                and candidate.get("condition", {}).get("condition_id") in expected_ids
             ):
                 result = verify_result(context, path.parent)
                 identity = (result["condition"]["family"], result["condition"]["task"])
@@ -219,32 +221,37 @@ def collect_study(
     results, attempts, conflicts = _discover(context, roots, stage, logger)
     coverage = _coverage(context[0], stage, results, attempts, conflicts)
     missing = [row for row in coverage if row["status"] != "completed"]
-    _json(
-        destination / "coverage.json",
-        {
+    coverage_report = {
             "study_id": context[0]["study_id"],
             "stage": stage,
-            "status": "incomplete" if missing else "completed",
+            "status": "incomplete" if missing else "collecting",
             "expected": len(coverage),
             "completed": len(coverage) - len(missing),
             "conditions": coverage,
-        },
-    )
+        }
+    _json(destination / "coverage.json", coverage_report)
     pd.DataFrame(coverage).to_csv(destination / "coverage.csv", index=False)
     if conflicts:
         raise ValueError("Conflicting successful attempts exist for the same condition")
     if missing and not allow_partial:
         raise ValueError(f"Campaign is incomplete: {len(missing)} conditions remain")
-    with phase(logger, "summarizing condition metrics"):
-        rows = _write_condition_metrics(results, destination, stage)
-        _write_runtime_summary(rows, destination)
-        if stage == "cv":
-            from daic_foundation_tab.tabular_study.comparisons import write_cv_comparisons
+    try:
+        with phase(logger, "summarizing condition metrics"):
+            rows = _write_condition_metrics(results, destination, stage)
+            _write_runtime_summary(rows, destination)
+            if stage == "cv":
+                from daic_foundation_tab.tabular_study.comparisons import write_cv_comparisons
 
-            oof = _write_cv_summaries(context, results, destination)
-            write_cv_comparisons(context[0], results, oof, destination, logger)
-        else:
-            from daic_foundation_tab.tabular_study.comparisons import write_final_comparisons
+                oof = _write_cv_summaries(context, results, destination)
+                write_cv_comparisons(context[0], results, oof, destination, logger)
+            else:
+                from daic_foundation_tab.tabular_study.comparisons import write_final_comparisons
 
-            write_final_comparisons(results, destination)
+                write_final_comparisons(results, destination)
+    except Exception as error:
+        coverage_report.update(status="failed", error_type=type(error).__name__)
+        _json(destination / "coverage.json", coverage_report)
+        raise
+    coverage_report["status"] = "incomplete" if missing else "completed"
+    _json(destination / "coverage.json", coverage_report)
     return destination

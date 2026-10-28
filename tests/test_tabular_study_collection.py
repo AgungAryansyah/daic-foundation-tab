@@ -94,3 +94,22 @@ def test_optional_final_stage_compares_development_and_labeled_test(prepared, tm
     differences = pd.read_csv(report / "final_differences.csv")
     assert set(differences["split"]) == {"dev", "test"}
     assert len(differences.loc[differences["metric"] == "macro_f1"]) == 2
+
+
+def test_collection_records_summary_failure(prepared, tmp_path, monkeypatch):
+    from daic_foundation_tab.tabular_study import comparisons
+
+    bundle, _ = prepared
+    root = tmp_path / "runs"
+    root.mkdir()
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("summary failed")
+
+    monkeypatch.setattr(comparisons, "write_cv_comparisons", fail)
+    report = tmp_path / "report"
+    with pytest.raises(RuntimeError, match="summary failed"):
+        collect_study(bundle, [root], report, allow_partial=True)
+    status = json.loads((report / "coverage.json").read_text())
+    assert status["status"] == "failed"
+    assert status["error_type"] == "RuntimeError"
