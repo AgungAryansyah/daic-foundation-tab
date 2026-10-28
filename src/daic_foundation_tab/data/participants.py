@@ -58,11 +58,13 @@ def participant_index(
                     "feature_set", config["experiment"].get("feature_set", "audio_visual")
                 )
             ]
-            patterns = [
-                item["pattern"]
-                for item in data.get("source_groups", {}).values()
-                if item["modality"] in modalities
-            ]
+            groups = {
+                group
+                for modality in modalities
+                if config["modalities"].get(modality, {}).get("enabled", False)
+                for group in config["modalities"][modality].get("groups", [])
+            }
+            patterns = [data["source_groups"][group]["pattern"] for group in sorted(groups)]
             if not patterns:
                 raise ValueError("Shared tabular cohort requires source_groups")
         available = []

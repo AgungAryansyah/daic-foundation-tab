@@ -109,3 +109,15 @@ def test_preparation_reports_progress_from_start(tmp_path):
     prepare_manifest(config, lambda completed, total: calls.append((completed, total)))
     assert calls[0] == (0, 10)
     assert calls[-1] == (10, 10)
+
+
+def test_manifest_ignores_unselected_inherited_source_groups(tmp_path):
+    config = manifest_config(tmp_path)
+    config["data"]["source_groups"]["inherited_audio"] = {
+        "modality": "audio",
+        "parser": "csv",
+        "pattern": "data/{participant_id}_unused.csv",
+    }
+    manifest = prepare_manifest(config)
+    assert len(manifest["participants"]) == 10
+    assert manifest["exclusions"] == []
