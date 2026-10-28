@@ -45,6 +45,7 @@ def _discover(context: tuple, roots: list[Path], stage: str, logger) -> tuple[di
         log_progress(logger, "verifying condition results", 0, len(paths), started)
         versions = None
         source_hashes = {}
+        test_targets = {}
         for completed, path in enumerate(paths, 1):
             candidate = json.loads(path.read_text())
             if (
@@ -55,6 +56,15 @@ def _discover(context: tuple, roots: list[Path], stage: str, logger) -> tuple[di
                 result = verify_result(context, path.parent)
                 identity = (result["condition"]["family"], result["condition"]["task"])
                 record = json.loads((path.parent / "study_run.json").read_text())
+                test_predictions = path.parent / "predictions_test.csv"
+                if stage == "final" and test_predictions.is_file():
+                    predictions = pd.read_csv(test_predictions, dtype={"participant_id": str})
+                    column = "y_true" if identity[1] == "classification" else "phq8_true"
+                    if column in predictions and predictions[column].notna().any():
+                        targets = dict(zip(predictions["participant_id"], predictions[column], strict=True))
+                        if identity[1] in test_targets and test_targets[identity[1]] != targets:
+                            raise ValueError("Test ground truth differs across results")
+                        test_targets[identity[1]] = targets
                 source_hash = record["source_checkpoint_sha256"]
                 if identity in source_hashes and source_hashes[identity] != source_hash:
                     raise ValueError("Source model checkpoints differ across results")

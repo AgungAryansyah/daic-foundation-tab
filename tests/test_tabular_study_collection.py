@@ -113,3 +113,18 @@ def test_collection_records_summary_failure(prepared, tmp_path, monkeypatch):
     status = json.loads((report / "coverage.json").read_text())
     assert status["status"] == "failed"
     assert status["error_type"] == "RuntimeError"
+
+
+def test_final_collection_rejects_different_test_ground_truth(prepared, tmp_path):
+    bundle, _ = prepared
+    context = read_bundle(bundle)
+    root = tmp_path / "runs"
+    truth = tmp_path / "truth.csv"
+    items = [x for x in context[0]["conditions"]["final"] if x["family"] == "tabpfn35"
+             and x["modality"] == "audio" and x["task"] == "classification"]
+    for index, item in enumerate(items):
+        pd.DataFrame({"Participant_ID": [500, 501], "PHQ8_Score": [3, 14 - index * 10]}).to_csv(truth, index=False)
+        output = run_condition(bundle, item, {"output_root": str(root), "test_ground_truth": str(truth)}, f"attempt-{index}")
+        write_result(context, item, output)
+    with pytest.raises(ValueError, match="Test ground truth differs"):
+        collect_study(bundle, [root], tmp_path / "report", stage="final", allow_partial=True)
