@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import tempfile
 from copy import deepcopy
 from pathlib import Path
 
@@ -141,11 +142,13 @@ def prepare_bundle(
                 raise ValueError(f"Shared {split} cohort exceeds max_exclusion_fraction")
         _json(destination / "participants.json", manifest)
         working["experiment"]["partition_manifest"] = str(destination / "participants.json")
-        with phase(logger, "preparing numeric features") as started:
-            dataset = build_or_load_dataset(
-                working,
-                lambda n, total: log_progress(logger, "preparing features", n, total, started),
-            )
+        with tempfile.TemporaryDirectory(prefix="daic-study-cache-") as cache:
+            working["project"]["cache_root"] = cache
+            with phase(logger, "preparing numeric features") as started:
+                dataset = build_or_load_dataset(
+                    working,
+                    lambda n, total: log_progress(logger, "preparing features", n, total, started),
+                )
         table = dataset.table.copy()
         if (
             table.loc[table["split"] == "test", ["target_binary", "target_phq8"]]
