@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from collections.abc import Callable, Mapping
 from importlib.metadata import PackageNotFoundError, distribution, version
@@ -313,7 +314,8 @@ class KumoMediumFineTunedModel:
         baseline = best = self._evaluate(x, y, validation_x, validation_target)
         checkpoint = checkpoint_directory / "best.pt"
         torch.save(self._model.state_dict(), checkpoint)
-        selected_epoch = unsuccessful = steps = completed = 0
+        selected_epoch = unsuccessful = steps = completed = skipped = 0
+        metric = baseline
         parameters = self._parameters
         optimizer = torch.optim.AdamW(
             self._model.parameters(),
@@ -342,6 +344,8 @@ class KumoMediumFineTunedModel:
             self._model.train()
             self._model.clear()
             losses = []
+            epoch_steps = steps
+            rate = optimizer.param_groups[0]["lr"]
             for context, query in self._episodes(target, random):
                 context = torch.as_tensor(context, device=self._device)
                 query = torch.as_tensor(query, device=self._device)
@@ -350,18 +354,36 @@ class KumoMediumFineTunedModel:
                     loss = self._train_loss(x, y, context, query, recipe, generator)
                 if not torch.isfinite(loss):
                     raise KumoMediumFineTuningError("Kumo training loss must be finite")
+                losses.append(float(loss.detach()))
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(
-                    self._model.parameters(), parameters["grad_clip"], error_if_nonfinite=True
-                )
+                try:
+                    torch.nn.utils.clip_grad_norm_(
+                        self._model.parameters(), parameters["grad_clip"], error_if_nonfinite=True
+                    )
+                except RuntimeError:
+                    invalid = any(parameter.grad is not None and not torch.isfinite(parameter.grad).all()
+                                  for parameter in self._model.parameters())
+                    if not scaler.is_enabled() or not invalid:
+                        raise
+                    previous_scale = scaler.get_scale()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    if scaler.get_scale() >= previous_scale:
+                        raise KumoMediumFineTuningError("AMP overflow did not reduce the loss scale") from None
+                    skipped += 1
+                    logging.getLogger(__name__).warning(
+                        "AMP overflow: skipped optimizer update; skipped=%d loss_scale=%g -> %g",
+                        skipped, previous_scale, scaler.get_scale(),
+                    )
+                    continue
                 rate = optimizer.param_groups[0]["lr"]
                 scaler.step(optimizer)
                 scaler.update()
                 scheduler.step()
                 steps += 1
-                losses.append(float(loss.detach()))
-            metric = self._evaluate(x, y, validation_x, validation_target)
+            if steps > epoch_steps:
+                metric = self._evaluate(x, y, validation_x, validation_target)
             completed = epoch + 1
             improved = (
                 metric < best - parameters["min_delta"]
@@ -371,7 +393,7 @@ class KumoMediumFineTunedModel:
             if improved:
                 best, selected_epoch, unsuccessful = metric, completed, 0
                 torch.save(self._model.state_dict(), checkpoint)
-            else:
+            elif steps > epoch_steps:
                 unsuccessful += 1
             if epoch_callback is not None:
                 epoch_callback(
@@ -379,11 +401,16 @@ class KumoMediumFineTunedModel:
                         "train/epoch": epoch,
                         "train/mean_loss": float(np.mean(losses)),
                         "train/lr": rate,
+                        "train/optimizer_steps": steps,
+                        "train/amp_skipped_steps": skipped,
+                        "train/loss_scale": scaler.get_scale(),
                         f"val/{parameters['eval_metric']}": metric,
                     }
                 )
             if unsuccessful >= parameters["patience"]:
                 break
+        if steps == 0:
+            raise KumoMediumFineTuningError("AMP overflow prevented every optimizer update")
         self._model.load_state_dict(
             torch.load(checkpoint, map_location=self._device, weights_only=True), strict=True
         )
@@ -406,6 +433,8 @@ class KumoMediumFineTunedModel:
             "selected_epoch": selected_epoch,
             "epochs_completed": completed,
             "optimizer_steps": steps,
+            "amp_skipped_steps": skipped,
+            "amp_final_scale": scaler.get_scale(),
             "source_checkpoint_sha256": self._sha256(source),
         }
         return self

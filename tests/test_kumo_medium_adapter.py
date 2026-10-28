@@ -210,6 +210,50 @@ def test_training_updates_weights_and_uses_only_training_context(monkeypatch, tm
     assert torch.equal(baseline[5], validation[5])
 
 
+def test_amp_overflow_reduces_scale_without_advancing_optimizer_or_patience(monkeypatch, tmp_path):
+    scaler_type = torch.amp.GradScaler
+    install_toy(monkeypatch, tmp_path, metrics=[0.5, 0.6])
+    monkeypatch.setattr(torch.amp, "GradScaler", lambda *args, **kwargs: scaler_type("cpu"))
+    model = create_model(model_config(epochs=3, patience=1))
+    monkeypatch.setattr(model, "_train_loss", lambda *args: (model._model.linear.weight.sum().half() * 2).float())
+    history = []
+    fit_model(model, tmp_path / "checkpoints", history.append)
+    metadata = model.finetune_metadata()
+    assert metadata["amp_skipped_steps"] == 2
+    assert metadata["optimizer_steps"] == 1
+    assert metadata["epochs_completed"] == 3
+    assert [row["train/amp_skipped_steps"] for row in history] == [1, 2, 2]
+    assert all(row["train/lr"] == model._parameters["learning_rate"] for row in history)
+    assert all(torch.isfinite(parameter).all() for parameter in model._model.parameters())
+
+
+def test_persistent_amp_overflow_keeps_weights_unchanged_and_fails(monkeypatch, tmp_path):
+    scaler_type = torch.amp.GradScaler
+    instances = install_toy(monkeypatch, tmp_path, metrics=[0.5])
+    monkeypatch.setattr(torch.amp, "GradScaler", lambda *args, **kwargs: scaler_type("cpu"))
+    model = create_model(model_config(epochs=1))
+    monkeypatch.setattr(model, "_train_loss", lambda *args: (model._model.linear.weight.sum().half() * 2).float())
+    with pytest.raises(KumoMediumFineTuningError, match="every optimizer update"):
+        fit_model(model, tmp_path / "checkpoints")
+    _, native, source = instances[0]
+    for name, value in torch.load(source, weights_only=True).items():
+        assert torch.equal(native.state_dict()[name], value)
+
+
+def test_invalid_gradients_without_loss_scaling_still_fail(monkeypatch, tmp_path):
+    install_toy(monkeypatch, tmp_path)
+    model = create_model(model_config())
+
+    def loss(*args):
+        value = model._model.linear.weight.sum()
+        value.register_hook(lambda gradient: torch.full_like(gradient, float("inf")))
+        return value
+
+    monkeypatch.setattr(model, "_train_loss", loss)
+    with pytest.raises(RuntimeError, match="non-finite"):
+        fit_model(model, tmp_path / "checkpoints")
+
+
 @pytest.mark.parametrize(
     "regression,metrics,selected,completed",
     [
