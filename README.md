@@ -14,6 +14,8 @@ The examples do not define research campaigns.
 The [matched DAIC-WOZ study](docs/matched-study.md) defines 16 conditions across all four models,
 both adaptation methods, and both prediction tasks. It enables W&B tracking and uses shared participant splits.
 
+For the distributed TabPFN and Kumo study, see the [tabular cross-validation guide](docs/tabular-cv-study.md).
+
 ## Remote environment
 
 Run fine-tuning only on the remote Linux x86_64 GPU server. The project requires Python 3.12, PyTorch 2.9.1 with CUDA 13.0, and an NVIDIA driver from the R580 series or newer. Linux driver 580.65.06 or newer is recommended for CUDA 13.0; see the [NVIDIA compatibility table](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver). The CUDA 13 wheel requires a supported NVIDIA GPU (Turing or newer) and glibc 2.28 or newer. CPU fine-tuning is intentionally unsupported.
