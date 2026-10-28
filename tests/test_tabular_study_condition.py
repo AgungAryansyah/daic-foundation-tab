@@ -109,11 +109,18 @@ def test_cv_evaluates_only_outer_fold_with_fresh_models(prepared, tmp_path, fami
         assert [p.name for p in (output / "checkpoints").iterdir()] == ["best.pt"]
 
 
-def test_final_stage_scores_test_only_after_prediction(prepared, tmp_path):
+def test_final_stage_scores_test_only_after_prediction(prepared, tmp_path, monkeypatch):
     bundle, calls = prepared
     condition = verify_bundle(bundle)["conditions"]["final"][0]
     truth = tmp_path / "truth.csv"
     pd.DataFrame({"Participant_ID": [500, 501], "PHQ8_Score": [3, 14]}).to_csv(truth, index=False)
+    read_truth = execution.load_test_ground_truth
+
+    def checked_truth(*args, **kwargs):
+        assert [item[0] for item in calls] == ["context", "predict", "predict"]
+        return read_truth(*args, **kwargs)
+
+    monkeypatch.setattr(execution, "load_test_ground_truth", checked_truth)
     output = execution.run_condition(
         bundle,
         condition,

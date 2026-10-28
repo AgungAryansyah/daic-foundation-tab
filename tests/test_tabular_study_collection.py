@@ -77,3 +77,20 @@ def test_collection_rejects_inconsistent_pretrained_checkpoints(prepared, tmp_pa
         write_result(context, item, output)
     with pytest.raises(ValueError, match="checkpoints differ"):
         collect_study(bundle, [root], tmp_path / "report", allow_partial=True)
+
+
+def test_optional_final_stage_compares_development_and_labeled_test(prepared, tmp_path):
+    bundle, _ = prepared
+    context = read_bundle(bundle)
+    root = tmp_path / "runs"
+    truth = tmp_path / "truth.csv"
+    pd.DataFrame({"Participant_ID": [500, 501], "PHQ8_Score": [3, 14]}).to_csv(truth, index=False)
+    items = [x for x in context[0]["conditions"]["final"] if x["family"] == "tabpfn35"
+             and x["modality"] == "audio" and x["task"] == "classification"]
+    for index, item in enumerate(items):
+        output = run_condition(bundle, item, {"output_root": str(root), "test_ground_truth": str(truth)}, f"attempt-{index}")
+        write_result(context, item, output)
+    report = collect_study(bundle, [root], tmp_path / "final-report", stage="final", allow_partial=True)
+    differences = pd.read_csv(report / "final_differences.csv")
+    assert set(differences["split"]) == {"dev", "test"}
+    assert len(differences.loc[differences["metric"] == "macro_f1"]) == 2
