@@ -62,6 +62,23 @@ uv run --no-sync daic-foundation-tab collect-tabular-study \
 
 The collector verifies identities, result files, dependencies, and model checkpoints. It reports missing or conflicting conditions and fails by default when the schedule is incomplete. Add `--allow-partial` for a provisional report. `coverage.json` and `coverage.csv` show condition status. The report includes per-condition metrics and hardware-grouped runtime summaries. Complete five-fold groups also get fold summaries and pooled out-of-fold predictions: one prediction per training participant. Paired FT-minus-ICL comparisons use matching participants and folds. Bootstrap intervals resample the saved predictions within folds; they do not include uncertainty from retraining the models.
 
+## Repair and resume
+
+The study rejects source changes by default. For a compatible bug fix, register an explicit execution revision before restarting. Review the source diff first. List every changed source file with `--allowed-files`. Use the original study commit as `BASELINE_COMMIT` below:
+
+```bash
+uv run --no-sync daic-foundation-tab register-tabular-revision \
+  --study /private/tabular-study --baseline-commit BASELINE_COMMIT \
+  --allowed-files src/daic_foundation_tab/models/kumo_medium_ft.py \
+  --reason "Recover from AMP gradient overflow without changing finite updates"
+```
+
+The command checks the original source fingerprint, committed current source, and declared file changes. It rejects dependency changes. Use this procedure only when the fix preserves participant assignments, prepared data, model settings, and valid completed results. A change to the research protocol requires a new study.
+
+Keep `execution_revisions.json` with the private study bundle when copying it to another system. This file records the source hashes, commit, permitted paths, and reason. The original study definition and completed results retain their identities. New executions record their actual source identity in local artifacts and W&B. Collected reports include source identities and commits per condition and prediction, plus `software_provenance.json`. Restart the same execution groups to reuse verified completed conditions.
+
+Kumo fine-tuning handles mixed-precision gradient overflow by skipping the unsafe optimizer update and reducing the loss scale. Skipped updates do not advance the learning-rate schedule or early-stopping count. Epoch logs and W&B record `train/amp_skipped_steps`, `train/optimizer_steps`, and `train/loss_scale`. Persistent overflow that prevents all optimizer updates remains a failure.
+
 ## Add model seeds
 
 Create a new YAML file that extends the default and sets, for example, `tabular_study.model_seeds: [42, 0, 1, 2, 3]`. Prepare a new, empty destination with `--reuse-data /private/tabular-study`. The feature contents and folds are reused, and existing condition IDs remain valid. The expanded schedule has 600 cross-validation conditions. Run each group again using the expanded bundle and the same output roots; verified existing conditions are skipped. Collect against the expanded bundle. Do not change other study settings when using `--reuse-data`.
