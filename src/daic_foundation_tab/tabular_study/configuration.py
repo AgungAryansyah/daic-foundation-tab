@@ -4,6 +4,8 @@ from copy import deepcopy
 from itertools import product
 from pathlib import Path
 
+import yaml
+
 from daic_foundation_tab.config import ConfigError, deep_merge, load_config, validate_config
 
 OPTIONS = {
@@ -12,6 +14,24 @@ OPTIONS = {
     "tasks": {"classification", "regression"},
     "methods": {"frozen_icl", "fine_tuning"},
 }
+
+
+def _profile_directory(path: Path) -> Path | None:
+    raw = yaml.safe_load(path.read_text()) or {}
+    settings = raw.get("tabular_study", {})
+    if isinstance(settings, dict) and "tabular_profiles" in settings:
+        value = settings["tabular_profiles"]
+        if not isinstance(value, str) or not value:
+            raise ConfigError("tabular_study.tabular_profiles must be a path")
+        return (path.parent / value).resolve()
+    parents = raw.get("extends", [])
+    if isinstance(parents, str):
+        parents = [parents]
+    for parent in reversed(parents):
+        directory = _profile_directory((path.parent / parent).resolve())
+        if directory is not None:
+            return directory
+    return None
 
 
 def load_study_config(path: str | Path) -> dict:
@@ -33,6 +53,7 @@ def load_study_config(path: str | Path) -> dict:
         if (
             not isinstance(values, list)
             or not values
+            or any(not isinstance(value, str) for value in values)
             or len(set(values)) != len(values)
             or not set(values) <= allowed
         ):
@@ -58,7 +79,9 @@ def load_study_config(path: str | Path) -> dict:
     fraction = settings.get("selection_fraction")
     if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not 0 < fraction < 1:
         raise ConfigError("tabular_study.selection_fraction must be between zero and one")
-    profile_dir = (path.parent / settings["tabular_profiles"]).resolve()
+    profile_dir = _profile_directory(path)
+    if profile_dir is None:
+        raise ConfigError("tabular_study.tabular_profiles is required")
     profiles = {}
     for family, task, mode in product(
         settings["model_families"], settings["tasks"], settings["methods"]

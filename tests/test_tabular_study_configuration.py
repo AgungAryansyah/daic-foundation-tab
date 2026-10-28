@@ -37,6 +37,7 @@ def test_default_study_resolves_all_conditions_and_profiles():
         ("model_seeds", [42, 42]),
         ("folds", 1),
         ("modalities", ["unknown"]),
+        ("modalities", [["audio"]]),
         ("selection_fraction", 1),
     ],
 )
@@ -49,3 +50,11 @@ def test_invalid_sweep_settings_are_rejected(tmp_path, key, value):
     path.write_text(yaml.safe_dump(override))
     with pytest.raises(ConfigError):
         load_study_config(path)
+
+
+def test_inherited_profile_path_is_relative_to_declaring_config(tmp_path):
+    path = tmp_path / "seeds.yaml"
+    path.write_text(yaml.safe_dump({"extends": str(PRESET), "tabular_study": {"model_seeds": [42, 1]}}))
+    config = load_study_config(path)
+    assert config["tabular_study"]["model_seeds"] == [42, 1]
+    assert len(condition_specs(config)) == 240
