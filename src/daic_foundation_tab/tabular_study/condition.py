@@ -18,7 +18,7 @@ from daic_foundation_tab.evaluation.predictions import classification_prediction
 from daic_foundation_tab.evaluation.regression import regression_metrics, regression_predictions
 from daic_foundation_tab.models.registry import create_model
 from daic_foundation_tab.runner import _git_commit
-from daic_foundation_tab.tabular_study.bundle import file_hash, read_bundle
+from daic_foundation_tab.tabular_study.bundle import file_hash, read_bundle, software_identity
 from daic_foundation_tab.tracking.artifacts import RunArtifacts
 from daic_foundation_tab.tracking.environment import environment_metadata
 from daic_foundation_tab.tracking.lifecycle import RunRecord
@@ -107,6 +107,8 @@ def _condition_config(study: dict, condition: dict, host: dict, attempt_id: str)
     )
     config["evaluation"]["repeated_holdout"]["enabled"] = False
     config["bootstrap"]["enabled"] = False
+    executed_software = software_identity()
+    revision = study.get("_execution_revisions", {}).get(executed_software)
     config["study"] = {
         "campaign_id": study["study_id"],
         "condition_id": condition["condition_id"],
@@ -117,7 +119,9 @@ def _condition_config(study: dict, condition: dict, host: dict, attempt_id: str)
         "fold_seed": settings["fold_seed"],
         "attempt_id": attempt_id,
         "host_label": host.get("host_label", "unlabeled"),
-        "software_identity": study["software_identity"],
+        "software_identity": executed_software,
+        "baseline_software_identity": study["software_identity"],
+        "software_revision_id": revision["revision_id"] if revision else None,
     }
     tracking = config["tracking"]["wandb"]
     tracking.update(group=study["study_id"])

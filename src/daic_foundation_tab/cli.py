@@ -48,6 +48,11 @@ def _parser() -> argparse.ArgumentParser:
     prepare_tabular.add_argument("--config", required=True, type=Path)
     prepare_tabular.add_argument("--output", required=True, type=Path)
     prepare_tabular.add_argument("--reuse-data", type=Path)
+    revision = subparsers.add_parser("register-tabular-revision")
+    revision.add_argument("--study", required=True, type=Path)
+    revision.add_argument("--baseline-commit", required=True)
+    revision.add_argument("--allowed-files", required=True, nargs="+")
+    revision.add_argument("--reason", required=True)
     run_tabular = subparsers.add_parser("run-tabular-study")
     run_tabular.add_argument("--study", required=True, type=Path)
     run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
@@ -189,6 +194,12 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "register-tabular-revision":
+        from daic_foundation_tab.tabular_study.revisions import register_revision
+
+        record = register_revision(args.study, args.baseline_commit, args.allowed_files, args.reason)
+        print(f"Registered execution revision {record['revision_id']} at {record['git_commit']}")
+        return
     if args.command == "collect-tabular-study":
         from daic_foundation_tab.tabular_study.collection import collect_study
 

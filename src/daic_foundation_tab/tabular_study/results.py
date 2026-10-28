@@ -41,7 +41,7 @@ def write_result(context: tuple, condition: dict, output: Path) -> dict:
         "version": 1,
         "study_id": study["study_id"],
         "condition": condition,
-        "software_identity": study["software_identity"],
+        "software_identity": json.loads((output / "study_run.json").read_text())["software_identity"],
         "files": {name: file_hash(output / name) for name in names},
         "checkpoint": checkpoint,
     }
@@ -61,7 +61,7 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
     if (
         result.get("version") != 1
         or result.get("study_id") != study["study_id"]
-        or result.get("software_identity") != study["software_identity"]
+        or result.get("software_identity") not in {study["software_identity"], *study.get("_execution_revisions", {})}
     ):
         raise ValueError("Result study or software identity mismatch")
     condition = result["condition"]
@@ -105,7 +105,7 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
         record.get("status") != "completed"
         or record.get("condition_id") != condition["condition_id"]
         or record.get("stage") != condition["stage"]
-        or record.get("software_identity") != study["software_identity"]
+        or record.get("software_identity") != result["software_identity"]
         or record.get("dataset_id") != study["configuration"]["data"]["dataset_id"]
         or record.get("task") != condition["task"]
         or record.get("mode") != condition["mode"]
@@ -115,6 +115,15 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
     ):
         raise ValueError("Result lifecycle provenance mismatch")
     saved_config = yaml.safe_load((output / "config_resolved.yaml").read_text())
+    if saved_config["study"]["software_identity"] != result["software_identity"]:
+        raise ValueError("Result source identity differs from its execution settings")
+    revision = study.get("_execution_revisions", {}).get(result["software_identity"])
+    if revision and (
+        record.get("software_revision_id") != revision["revision_id"]
+        or saved_config["study"].get("software_revision_id") != revision["revision_id"]
+        or record.get("baseline_software_identity") != study["software_identity"]
+    ):
+        raise ValueError("Result execution revision provenance mismatch")
     detail = json.loads((output / "adaptation_metadata.json").read_text())
     source_hash = detail.get("source_checkpoint_sha256")
     if not isinstance(source_hash, str) or len(source_hash) != 64 or record.get("source_checkpoint_sha256") != source_hash:

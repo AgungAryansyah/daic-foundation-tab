@@ -82,7 +82,10 @@ def verify_bundle(directory: str | Path, *, verify_software: bool = True) -> dic
     expected = _study_record(study["configuration"], directory, study["software_identity"])
     if study != expected:
         raise ValueError("Study configuration or condition identity changed")
-    if verify_software and study["software_identity"] != software_identity():
+    from daic_foundation_tab.tabular_study.revisions import load_revisions
+
+    revisions = load_revisions(directory, study)
+    if verify_software and software_identity() not in {study["software_identity"], *revisions}:
         raise ValueError("Executed source or dependency lock differs from the prepared study")
     return study
 
@@ -175,6 +178,9 @@ def prepare_bundle(
 def read_bundle(directory: str | Path) -> tuple[dict, pd.DataFrame, pd.DataFrame, dict]:
     directory = Path(directory).resolve()
     study = verify_bundle(directory)
+    from daic_foundation_tab.tabular_study.revisions import load_revisions
+
+    study["_execution_revisions"] = load_revisions(directory, study)
     return (
         study,
         pd.read_parquet(directory / "features.parquet"),

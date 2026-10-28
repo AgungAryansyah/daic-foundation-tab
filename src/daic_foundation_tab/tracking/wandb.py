@@ -103,7 +103,7 @@ def sanitized_wandb_config(
             key: config.get("study", {})[key]
             for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs", "stage",
                         "condition_id", "group_id", "fold", "model_seed", "fold_seed",
-                        "selection_seed", "attempt_id", "host_label", "software_identity")
+                        "selection_seed", "attempt_id", "host_label", "software_identity", "baseline_software_identity", "software_revision_id")
             if key in config.get("study", {})
         },
         "data": {
