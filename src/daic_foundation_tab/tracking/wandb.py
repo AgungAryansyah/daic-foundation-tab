@@ -286,6 +286,7 @@ class WandbTracker:
                     disable_git=True,
                     save_code=False,
                     x_save_requirements=False,
+                    console="off" if config.get("study", {}).get("stage") in {"cv", "final"} else "auto",
                 ),
             )
             if mode == "fine_tuning":
