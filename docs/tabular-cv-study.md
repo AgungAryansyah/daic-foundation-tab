@@ -2,7 +2,7 @@
 
 This study compares TabPFN-3.5 and Kumo Medium with frozen in-context learning (ICL) and fine-tuning. It evaluates binary depression classification and PHQ-8 score regression. The feature sets are audio, visual, and audio plus visual. It does not use a label-budget sweep.
 
-The default YAML is `configs/studies/daic_woz_tabular_cv.yaml`. It specifies five outer folds and one model seed (42). This gives 120 cross-validation conditions: two models × three feature sets × two methods × two tasks × five folds. The six model-and-feature groups each contain 20 conditions. There is a separate, optional final stage with 24 conditions; preparing the study does not run it.
+The DAIC-WOZ YAML is `configs/studies/daic_woz_tabular_cv.yaml`. The E-DAIC YAML is `configs/studies/edaic_tabular_cv.yaml`. Each specifies five outer folds and one model seed (42). This gives 120 cross-validation conditions per dataset: two models × three feature sets × two methods × two tasks × five folds. Each dataset has six model-and-feature groups with 20 conditions each. There is a separate, optional final stage with 24 conditions per dataset; preparing the study does not run it.
 
 All modalities use the same eligible audio-and-visual participant cohort. For each task, the folds are shared across models, modalities, and methods. Classification folds are stratified by class; regression folds use a separate split. Each outer training fold reserves 20% of its participants for fine-tuning selection. Frozen ICL uses the same remaining participants as its context. Feature selection uses only that fit/context pool. Outer-fold participants are never used for fitting or model selection. The official development and test splits remain outside cross-validation.
 
@@ -19,6 +19,10 @@ uv run --no-sync daic-foundation-tab prepare-tabular-study \
 ```
 
 Preparation creates the shared features, participant assignments, folds, and condition schedule. It reports progress and does not train a model. Copy this bundle privately to each system. It contains participant-level features and labels and must be protected as sensitive data. Its hashes identify the prepared contents and the source and dependency lock. Every system must use matching source files, `pyproject.toml`, `uv.lock`, dependencies, and pretrained checkpoint contents. A source change requires a new bundle or the original source version.
+
+For E-DAIC, use `configs/studies/edaic_tabular_cv.yaml` and a separate destination such as `outputs/edaic-tabular-study`. Its default data root is `data/edaic`, with 163 training, 56 development, and 56 test participants. It uses the existing OpenSMILE eGeMAPS audio features and OpenFace 2.1 visual features. DAIC-WOZ uses COVAREP audio features and CLNF visual features. The same modality name therefore does not imply the same feature extractor across datasets.
+
+Run E-DAIC first, then prepare and run DAIC-WOZ when its data is available. The total is 240 cross-validation conditions with one model seed. Prepare, execute, and collect each dataset separately. Each bundle has its own study identity and fold assignments. W&B records `data.dataset_id` and a separate study group. Compare fine-tuning with ICL within each dataset and report dataset results separately. This procedure does not train on one dataset and evaluate on the other.
 
 ## Run independent groups
 
