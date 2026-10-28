@@ -73,6 +73,7 @@ def _config(mode: str = "online") -> dict:
         "project": {"seed": 42, "output_root": "/private/outputs", "cache_root": "/private/cache"},
         "runtime": {"device": "cuda:0", "require_cuda": True},
         "data": {
+            "dataset_id": "edaic",
             "root": "/private/data",
             "labels": {"train": "/private/train.csv"},
             "missing_modality_policy": "exclude",
@@ -156,6 +157,7 @@ def _validation() -> dict:
 
 def test_sanitized_config_excludes_local_paths() -> None:
     config = sanitized_wandb_config(_config(), "cache-key", "study-123")
+    assert config["data"]["dataset_id"] == "edaic"
 
     serialized = json.dumps(config)
 

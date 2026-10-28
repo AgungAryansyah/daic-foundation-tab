@@ -107,6 +107,7 @@ def sanitized_wandb_config(
             if key in config.get("study", {})
         },
         "data": {
+            "dataset_id": data.get("dataset_id"),
             "cache_key": dataset_cache_key,
             "study_id": study_id,
             "missing_modality_policy": data.get("missing_modality_policy"),
