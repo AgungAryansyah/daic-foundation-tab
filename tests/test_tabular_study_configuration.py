@@ -10,8 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PRESET = ROOT / "configs/studies/daic_woz_tabular_cv.yaml"
 
 
-def test_default_study_resolves_all_conditions_and_profiles():
-    config = load_study_config(PRESET)
+@pytest.mark.parametrize("filename,dataset", [("daic_woz_tabular_cv.yaml", "daic_woz"),
+                                             ("edaic_tabular_cv.yaml", "edaic")])
+def test_default_study_resolves_all_conditions_and_profiles(filename, dataset):
+    config = load_study_config(PRESET.parent / filename)
+    assert config["data"]["dataset_id"] == dataset
     cv = condition_specs(config)
     final = condition_specs(config, "final")
     assert len(cv) == 120 and len(final) == 24
@@ -22,6 +25,11 @@ def test_default_study_resolves_all_conditions_and_profiles():
     )
     assert {x["model_seed"] for x in cv} == {42}
     assert all("transcript" not in str(x) for x in cv)
+    if dataset == "edaic":
+        assert config["data"]["root"] == "data/edaic"
+        assert config["data"]["expected_counts"] == {"train": 163, "dev": 56, "test": 56}
+        assert config["modalities"]["audio"]["groups"] == ["opensmile_egemaps"]
+        assert config["modalities"]["visual"]["groups"] == ["openface_21"]
     assert (
         config["profiles"]["tabpfn35:regression:fine_tuning"]["parameters"]["eval_metric"] == "mse"
     )

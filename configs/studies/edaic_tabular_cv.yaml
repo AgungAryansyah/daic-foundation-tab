@@ -1,0 +1,9 @@
+extends:
+  - daic_woz_tabular_cv.yaml
+  - ../datasets/edaic.yaml
+
+data:
+  dataset_id: edaic
+
+tabular_study:
+  name: edaic-tabular-cv
