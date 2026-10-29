@@ -16,6 +16,14 @@ from .text_base import TextExample, TextPrediction
 from .text_prompt import PromptEncoder, parse_score
 
 
+def load_text_tokenizer(model_config: dict):
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(
+        model_config["model_id"], revision=model_config["revision"]
+    )
+
+
 class QwenTextModel:
     def __init__(self, config: dict, *, model=None, tokenizer=None, revision: str | None = None):
         self.config = config
@@ -33,7 +41,7 @@ class QwenTextModel:
         import torch
 
         if self.model is None:
-            from transformers import AutoConfig, AutoTokenizer, Qwen3_5ForCausalLM
+            from transformers import AutoConfig, Qwen3_5ForCausalLM
 
             if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
                 raise RuntimeError("Qwen profiles require a CUDA device with BF16 support")
@@ -43,7 +51,7 @@ class QwenTextModel:
             self.revision = model_config._commit_hash
             if not self.revision:
                 raise RuntimeError("Cannot resolve an immutable Qwen checkpoint revision")
-            self.tokenizer = AutoTokenizer.from_pretrained(model_id, revision=self.revision)
+            self.tokenizer = load_text_tokenizer({**self.config["model"], "revision": self.revision})
             self.model = Qwen3_5ForCausalLM.from_pretrained(
                 model_id,
                 revision=self.revision,

@@ -92,7 +92,8 @@ def _identity(config: dict, parent: dict, files: dict, software: str) -> str:
                             "files": files, "software_identity": software})
 
 
-def prepare_bundle(config_path: str | Path, tabular: str | Path, destination: str | Path) -> Path:
+def prepare_bundle(config_path: str | Path, tabular: str | Path, destination: str | Path,
+                   *, tokenizer=None) -> Path:
     config = load_settings(config_path)
     tabular, destination = Path(tabular).resolve(), Path(destination).resolve()
     parent = verify_tabular(tabular, verify_software=False)
@@ -149,6 +150,9 @@ def prepare_bundle(config_path: str | Path, tabular: str | Path, destination: st
                  "software_identity": software, "configuration": logical, "files": files,
                  "conditions": _schedule(study_id, logical, json.loads((destination / "folds.json").read_text()))}
     _json(destination / "study.json", study)
+    from .audit import audit_bundle
+
+    audit_bundle(destination, tokenizer=tokenizer)
     return destination
 
 

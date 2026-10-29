@@ -14,6 +14,7 @@ from daic_foundation_tab.transcript_study.bundle import (
     roles_for,
 )
 from tests.test_tabular_study_bundle import study_input
+from tests.test_text_prompt import TinyTokenizer
 
 ROOT = Path(__file__).parents[1]
 
@@ -44,7 +45,7 @@ def transcript_input(tmp_path, dataset_id="edaic"):
 def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id):
     config, parent, _ = transcript_input(tmp_path, dataset_id)
     original = {p.name: p.read_bytes() for p in parent.iterdir() if p.is_file()}
-    bundle = prepare_bundle(config, parent, tmp_path / "transcript")
+    bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
     study, rows, texts, folds = context = read_bundle(bundle)
     assert len(study["conditions"]["cv"]) == 20
     assert len(study["conditions"]["final"]) == 4
@@ -60,7 +61,7 @@ def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id
     shutil.copytree(bundle, relocated)
     assert read_bundle(relocated)[0] == study
     assert original == {p.name: p.read_bytes() for p in parent.iterdir() if p.is_file()}
-    again = prepare_bundle(config, parent, tmp_path / "again")
+    again = prepare_bundle(config, parent, tmp_path / "again", tokenizer=TinyTokenizer())
     assert read_bundle(again)[0] == study
 
 
@@ -78,17 +79,17 @@ def test_transcript_preparation_rejects_incomplete_sources(tmp_path, problem):
     else:
         path.write_text("speaker\tvalue\nParticipant\t\n")
     with pytest.raises(ValueError, match="exactly one|Empty selected"):
-        prepare_bundle(config, parent, tmp_path / "transcript")
+        prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
 
 
 def test_changed_transcripts_invalidate_identity_and_bundle(tmp_path):
     config, parent, root = transcript_input(tmp_path)
-    bundle = prepare_bundle(config, parent, tmp_path / "transcript")
+    bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
     old = read_bundle(bundle)[0]["study_id"]
     next((root / "data").glob("*_TRANSCRIPT.csv")).write_text(
         "speaker\tvalue\nParticipant\tDifferent speech.\n"
     )
-    other = prepare_bundle(config, parent, tmp_path / "different")
+    other = prepare_bundle(config, parent, tmp_path / "different", tokenizer=TinyTokenizer())
     assert read_bundle(other)[0]["study_id"] != old
     (bundle / "transcripts.json").write_text("{}")
     with pytest.raises(ValueError, match="content changed"):
