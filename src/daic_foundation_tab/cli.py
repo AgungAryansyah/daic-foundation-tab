@@ -57,6 +57,12 @@ def _parser() -> argparse.ArgumentParser:
     transcript.add_argument("--config", required=True, type=Path)
     transcript.add_argument("--tabular-study", required=True, type=Path)
     transcript.add_argument("--output", required=True, type=Path)
+    for command in ("preflight-transcript-study",):
+        transcript_run = subparsers.add_parser(command)
+        transcript_run.add_argument("--study", required=True, type=Path)
+        transcript_run.add_argument("--host-config", required=True, type=Path)
+        transcript_run.add_argument("--task", required=True, choices=["classification", "regression"])
+        transcript_run.add_argument("--stage", choices=["cv", "final"], default="cv")
     run_tabular = subparsers.add_parser("run-tabular-study")
     run_tabular.add_argument("--study", required=True, type=Path)
     run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
@@ -202,6 +208,11 @@ def main() -> None:
         from daic_foundation_tab.transcript_study.bundle import prepare_bundle
 
         print(prepare_bundle(args.config, args.tabular_study, args.output))
+        return
+    if args.command == "preflight-transcript-study":
+        from daic_foundation_tab.transcript_study.preflight import preflight_study
+
+        preflight_study(args.study, args.host_config, args.task, stage=args.stage)
         return
     if args.command == "register-tabular-revision":
         from daic_foundation_tab.tabular_study.revisions import register_revision
