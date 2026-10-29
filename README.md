@@ -14,6 +14,8 @@ The examples do not define research campaigns.
 The [matched DAIC-WOZ study](docs/matched-study.md) defines 16 conditions across all four models,
 both adaptation methods, and both prediction tasks. It enables W&B tracking and uses shared participant splits.
 
+The [transcript cross-validation guide](docs/transcript-cv-study.md) describes separate E-DAIC and DAIC-WOZ campaigns that reuse exact tabular participants and folds. It includes full-prompt auditing, host preflight, independent task groups, checkpoint recovery, W&B tracking, and paired comparisons.
+
 For the distributed TabPFN and Kumo study, see the [tabular cross-validation guide](docs/tabular-cv-study.md).
 
 ## Remote environment

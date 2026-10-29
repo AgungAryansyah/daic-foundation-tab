@@ -1,0 +1,7 @@
+output_root: /private/transcript-runs
+cache_root: /private/transcript-cache
+host_label: gpu-node-a
+device: cuda:0
+cpu_threads: 1
+wandb:
+  mode: online
