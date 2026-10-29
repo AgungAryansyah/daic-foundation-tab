@@ -63,6 +63,13 @@ def _parser() -> argparse.ArgumentParser:
         transcript_run.add_argument("--host-config", required=True, type=Path)
         transcript_run.add_argument("--task", required=True, choices=["classification", "regression"])
         transcript_run.add_argument("--stage", choices=["cv", "final"], default="cv")
+    transcript_collect = subparsers.add_parser("collect-transcript-study")
+    transcript_collect.add_argument("--study", required=True, type=Path)
+    transcript_collect.add_argument("--runs", required=True, nargs="+", type=Path)
+    transcript_collect.add_argument("--output", required=True, type=Path)
+    transcript_collect.add_argument("--stage", choices=["cv", "final"], default="cv")
+    transcript_collect.add_argument("--allow-partial", action="store_true")
+    transcript_collect.add_argument("--tabular-report", type=Path)
     run_tabular = subparsers.add_parser("run-tabular-study")
     run_tabular.add_argument("--study", required=True, type=Path)
     run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
@@ -218,6 +225,12 @@ def main() -> None:
         from daic_foundation_tab.transcript_study.groups import run_group
 
         print(run_group(args.study, args.host_config, args.task, stage=args.stage))
+        return
+    if args.command == "collect-transcript-study":
+        from daic_foundation_tab.transcript_study.collection import collect_study
+
+        print(collect_study(args.study, args.runs, args.output, stage=args.stage,
+                            allow_partial=args.allow_partial, tabular_report=args.tabular_report))
         return
     if args.command == "register-tabular-revision":
         from daic_foundation_tab.tabular_study.revisions import register_revision
