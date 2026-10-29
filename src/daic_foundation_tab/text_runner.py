@@ -137,7 +137,7 @@ def run_text_experiment(config: dict, *, dataset=None, evaluation_splits: dict |
                     queries.extend([*training, *validation])
                 model.preflight(queries)
             tokenization_seconds = time.perf_counter() - phase_started
-            tracker = TextTracker(config, artifacts, metadata)
+            tracker = TextTracker(config, artifacts, metadata, environment=environment)
             fit_seconds = 0.0
             if mode == "fine_tuning":
                 with phase(logger, "training adapters") as phase_started:

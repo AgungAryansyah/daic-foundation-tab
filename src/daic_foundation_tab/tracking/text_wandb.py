@@ -9,7 +9,7 @@ from .wandb import _redact_paths, _scalar_values
 
 
 class TextTracker:
-    def __init__(self, config: dict, artifacts, model_metadata: dict):
+    def __init__(self, config: dict, artifacts, model_metadata: dict, *, environment: dict | None = None):
         self.run = None
         self.artifacts = artifacts
         self.settings = config["tracking"].get("wandb", {})
@@ -36,6 +36,7 @@ class TextTracker:
                     *self.settings.get("tags", []),
                 ])),
                 config={
+                    "dataset_id": config["data"].get("dataset_id"),
                     "model_id": model_metadata["model_id"],
                     "checkpoint_revision": model_metadata["checkpoint_revision"],
                     "task": config["experiment"]["task"],
@@ -44,15 +45,22 @@ class TextTracker:
                     "parameters": _redact_paths(config["model"].get("parameters", {})),
                     "study": {
                         key: config.get("study", {})[key]
-                        for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs")
+                        for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs",
+                                    "transcript_study_id", "parent_study_id", "software_identity", "condition_id",
+                                    "stage", "fold", "model_seed", "host_label", "execution_group", "cpu_threads")
                         if key in config.get("study", {})
                     },
                     "speaker_policy": config["data"]["transcripts"].get(
                         "speaker_policy", "participant_only"
                     ),
+                    "environment": {key: (environment or {})[key] for key in (
+                        "git_commit", "host_label", "gpu_name", "total_gpu_vram_bytes", "cuda_version",
+                        "cpu_threads", "container_ram_limit_mb", "dependency_versions"
+                    ) if key in (environment or {})},
                 },
                 settings=wandb.Settings(
-                    disable_git=True, save_code=False, x_save_requirements=False
+                    disable_git=True, save_code=False, x_save_requirements=False,
+                    console="off" if config.get("study", {}).get("transcript_study_id") else "auto",
                 ),
             )
             self.run.define_metric("fine_tuning/epoch", hidden=True)

@@ -45,3 +45,25 @@ def test_text_tracking_uses_an_allowlist_without_transcripts_or_participant_ids(
         {"runtime/fit_seconds": 2.0, "runtime/peak_cuda_allocated_mb": 32.0},
     ]
     assert run.summary["runtime/fit_seconds"] == 2.0
+
+
+def test_transcript_campaign_tracks_fold_provenance_and_disables_console(tmp_path, monkeypatch):
+    captured = {}
+    run = SimpleNamespace(id="campaign", url="local", log=lambda values: None, summary={},
+                          define_metric=lambda *args, **kwargs: None, finish=lambda **kwargs: None)
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(
+        init=lambda **kwargs: (captured.update(kwargs), run)[1], Settings=lambda **kwargs: kwargs))
+    config = text_config()
+    config["tracking"]["wandb"].update(enabled=True, mode="online")
+    config["study"] = {"transcript_study_id": "study", "parent_study_id": "parent", "condition_id": "condition",
+                       "fold": 1, "stage": "cv", "cpu_threads": 1, "participant_id": "PRIVATE"}
+    tracker = TextTracker(config, RunArtifacts(tmp_path, "qwen", "transcript", 42),
+                          {"model_id": "Qwen/Qwen3.5-2B", "checkpoint_revision": "pin"},
+                          environment={"git_commit": "commit", "cpu_threads": 1,
+                                       "container_ram_limit_mb": 16384, "private_path": "PRIVATE"})
+    tracker.finish()
+    assert captured["settings"]["console"] == "off"
+    assert captured["config"]["dataset_id"] == "synthetic"
+    assert captured["config"]["study"]["fold"] == 1
+    assert captured["config"]["environment"]["cpu_threads"] == 1
+    assert "PRIVATE" not in str(captured)
