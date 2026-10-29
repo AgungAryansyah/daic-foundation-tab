@@ -53,6 +53,10 @@ def _parser() -> argparse.ArgumentParser:
     revision.add_argument("--baseline-commit", required=True)
     revision.add_argument("--allowed-files", required=True, nargs="+")
     revision.add_argument("--reason", required=True)
+    transcript = subparsers.add_parser("prepare-transcript-study")
+    transcript.add_argument("--config", required=True, type=Path)
+    transcript.add_argument("--tabular-study", required=True, type=Path)
+    transcript.add_argument("--output", required=True, type=Path)
     run_tabular = subparsers.add_parser("run-tabular-study")
     run_tabular.add_argument("--study", required=True, type=Path)
     run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
@@ -194,6 +198,11 @@ def _compare(runs: list[Path], output: Path | None) -> Path:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "prepare-transcript-study":
+        from daic_foundation_tab.transcript_study.bundle import prepare_bundle
+
+        print(prepare_bundle(args.config, args.tabular_study, args.output))
+        return
     if args.command == "register-tabular-revision":
         from daic_foundation_tab.tabular_study.revisions import register_revision
 

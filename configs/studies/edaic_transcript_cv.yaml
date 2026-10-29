@@ -1,0 +1,9 @@
+extends:
+  - daic_woz_transcript_cv.yaml
+  - ../datasets/edaic.yaml
+
+data:
+  dataset_id: edaic
+
+transcript_study:
+  name: edaic-transcript-cv

@@ -1,0 +1,19 @@
+extends: ../examples/qwen35_2b/base.yaml
+
+model:
+  parameters:
+    max_length: 32768
+    epochs: 5
+    gradient_checkpointing: true
+
+tracking:
+  wandb:
+    enabled: true
+    mode: online
+
+transcript_study:
+  name: daic-woz-transcript-cv
+  model_seeds: [42]
+  demonstrations: 2
+  bootstrap_iterations: 2000
+  bootstrap_seed: 42
