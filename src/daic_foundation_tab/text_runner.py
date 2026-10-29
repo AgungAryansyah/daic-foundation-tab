@@ -29,7 +29,8 @@ from daic_foundation_tab.tracking.seeds import set_global_seed
 from daic_foundation_tab.tracking.text_wandb import TextTracker
 
 
-def run_text_experiment(config: dict, *, dataset=None, evaluation_splits: dict | None = None) -> Path:
+def run_text_experiment(config: dict, *, dataset=None, evaluation_splits: dict | None = None,
+                        extra_environment: dict | None = None, runtime_metrics=None) -> Path:
     evaluation_splits = evaluation_splits if evaluation_splits is not None else {"dev": "dev", "test": "test"}
     artifacts = RunArtifacts(
         config["project"]["output_root"],
@@ -56,6 +57,7 @@ def run_text_experiment(config: dict, *, dataset=None, evaluation_splits: dict |
             set_global_seed(config["project"]["seed"])
             reset_cuda_peak_memory(device)
             environment = environment_metadata(device)
+            environment.update(extra_environment or {})
             from daic_foundation_tab.runner import _git_commit
 
             environment["git_commit"] = _git_commit()
@@ -281,6 +283,8 @@ def run_text_experiment(config: dict, *, dataset=None, evaluation_splits: dict |
                                prompt_tokens_max=max(lengths), prompt_tokens_mean=float(np.mean(lengths)),
                                participants_per_second=len(responses) / predict_seconds if predict_seconds else 0,
                                prompt_tokens_per_second=sum(lengths) / predict_seconds if predict_seconds else 0)
+            if runtime_metrics:
+                runtime.update(runtime_metrics())
             artifacts.json("runtime.json", runtime)
             artifacts.json("model_metadata.json", metadata)
             tracker.metrics("runtime", runtime)

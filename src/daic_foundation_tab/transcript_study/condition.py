@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from pathlib import Path
 
@@ -34,7 +35,8 @@ def execution_config(study: dict, condition: dict, host: dict) -> dict:
     return config
 
 
-def run_condition(bundle: str | Path, condition: dict, host: dict, *, resume: Path | None = None) -> Path:
+def run_condition(bundle: str | Path, condition: dict, host: dict, *, resume: Path | None = None,
+                  extra_environment: dict | None = None, runtime_metrics=None) -> Path:
     context = read_bundle(bundle)
     study, rows, _, folds = context
     if condition not in study["conditions"].get(condition["stage"], []):
@@ -48,7 +50,17 @@ def run_condition(bundle: str | Path, condition: dict, host: dict, *, resume: Pa
         config["_resume_directory"] = str(resume)
     dataset = dataset_for(context, condition)
     evaluation_splits = {"cv": "evaluation"} if condition["stage"] == "cv" else {"dev": "dev", "test": "test"}
-    output = run_text_experiment(config, dataset=dataset, evaluation_splits=evaluation_splits)
+    completed = resume is not None and (resume / "study_run.json").is_file() and json.loads(
+        (resume / "study_run.json").read_text()
+    ).get("status") == "completed"
+    if completed:
+        record = json.loads((resume / "study_run.json").read_text())
+        if any(record.get(key) != config["study"][key] for key in ("condition_id", "software_identity", "transcript_study_id")):
+            raise ValueError("Incomplete result belongs to a different transcript condition")
+        output = resume
+    else:
+        output = run_text_experiment(config, dataset=dataset, evaluation_splits=evaluation_splits,
+                                     extra_environment=extra_environment, runtime_metrics=runtime_metrics)
     actual = pd.read_csv(output / "demonstrations.csv", dtype=str)["participant_id"].tolist()
     if actual != audit["demonstrations"]:
         raise ValueError("Executed demonstrations differ from the audited condition")
