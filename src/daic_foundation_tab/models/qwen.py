@@ -4,6 +4,7 @@ import json
 import math
 import shutil
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -151,7 +152,7 @@ class QwenTextModel:
         return results
 
     def _validation_metric(self, validation):
-        predictions = self.predict(validation)
+        predictions = self.predict([replace(example, target=None) for example in validation])
         target = [item.target for item in validation]
         if self.task == "classification":
             return classification_metrics(
@@ -218,6 +219,8 @@ class QwenTextModel:
                 ),
             )
         trainable = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
+        if self.parameters.get("gradient_checkpointing", False):
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
         if not trainable or any(
             parameter.requires_grad and "lora_" not in name
             for name, parameter in self.model.named_parameters()
@@ -343,6 +346,7 @@ class QwenTextModel:
             "checkpoint_revision": self.revision,
             "adaptation": "lora" if self.mode == "fine_tuning" else "frozen_icl",
             "optimizer_steps": self.optimizer_steps,
+            "gradient_checkpointing": bool(self.parameters.get("gradient_checkpointing", False)),
             "best_validation_metric": self.best_metric,
             "selection_metric": "roc_auc" if self.task == "classification" else "mae",
             "probability_kind": "normalized_answer_likelihood"

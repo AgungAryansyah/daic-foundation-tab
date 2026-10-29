@@ -43,6 +43,8 @@ def validate_text_config(config: Mapping) -> None:
         not parameters.get("quantization"), "Quantization is not supported by the initial profile"
     )
     require(parameters.get("enable_thinking", False) is False, "Thinking mode must be disabled")
+    require(isinstance(parameters.get("gradient_checkpointing", False), bool),
+            "gradient_checkpointing must be a boolean")
     for key, minimum in (
         ("max_length", 2),
         ("max_new_tokens", 1),

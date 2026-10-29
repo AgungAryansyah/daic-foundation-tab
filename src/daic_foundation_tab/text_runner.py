@@ -29,7 +29,8 @@ from daic_foundation_tab.tracking.seeds import set_global_seed
 from daic_foundation_tab.tracking.text_wandb import TextTracker
 
 
-def run_text_experiment(config: dict) -> Path:
+def run_text_experiment(config: dict, *, dataset=None, evaluation_splits: dict | None = None) -> Path:
+    evaluation_splits = evaluation_splits if evaluation_splits is not None else {"dev": "dev", "test": "test"}
     artifacts = RunArtifacts(
         config["project"]["output_root"],
         config["model"]["name"],
@@ -60,12 +61,14 @@ def run_text_experiment(config: dict) -> Path:
             environment["git_commit"] = _git_commit()
             artifacts.json("environment.json", environment)
             with phase(logger, "preparing transcripts") as phase_started:
-                dataset = load_transcripts(
-                    config,
-                    lambda n, total: log_progress(
-                        logger, "preparing transcripts", n, total, phase_started
-                    ),
-                )
+                if dataset is None:
+                    dataset = load_transcripts(
+                        config,
+                        lambda n, total: log_progress(
+                            logger, "preparing transcripts", n, total, phase_started
+                        ),
+                    )
+            preparation_seconds = time.perf_counter() - phase_started
             record_dataset(artifacts, config, dataset)
             mode = config["experiment"].get("mode", "fine_tuning")
             training = dataset.examples("fit", labeled=True)
@@ -83,9 +86,10 @@ def run_text_experiment(config: dict) -> Path:
                 "demonstrations.csv",
                 pd.DataFrame({"participant_id": [item.participant_id for item in demonstrations]}),
             )
-            with phase(logger, "loading model"):
+            with phase(logger, "loading model") as phase_started:
                 model = create_text_model(config)
                 model.prepare(demonstrations)
+            loading_seconds = time.perf_counter() - phase_started
             metadata = model.run_metadata()
             identity_config = {
                 key: value for key, value in config.items() if not key.startswith("_")
@@ -123,11 +127,14 @@ def run_text_experiment(config: dict) -> Path:
                     "speaker_policy", "participant_only"
                 ),
             )
-            with phase(logger, "validating prompts"):
-                queries = [*dataset.examples("dev"), *dataset.examples("test")]
+            if config.get("study", {}).get("transcript_study_id"):
+                record.update(**config["study"])
+            with phase(logger, "validating prompts") as phase_started:
+                queries = [example for role in evaluation_splits.values() for example in dataset.examples(role)]
                 if mode == "fine_tuning":
                     queries.extend([*training, *validation])
                 model.preflight(queries)
+            tokenization_seconds = time.perf_counter() - phase_started
             tracker = TextTracker(config, artifacts, metadata)
             fit_seconds = 0.0
             if mode == "fine_tuning":
@@ -159,10 +166,10 @@ def run_text_experiment(config: dict) -> Path:
                     )
                 fit_seconds = time.perf_counter() - phase_started
             predict_seconds = 0.0
-            for split in ("dev", "test"):
+            for split, role in evaluation_splits.items():
                 if split == "test" and not config["evaluation"].get("test_predictions", True):
                     continue
-                examples = dataset.examples(split)
+                examples = dataset.examples(role)
                 predictions = []
                 with (
                     phase(logger, f"predicting {split}") as phase_started,
@@ -193,9 +200,9 @@ def run_text_experiment(config: dict) -> Path:
                 predict_seconds += time.perf_counter() - phase_started
                 with phase(logger, f"evaluating {split}"):
                     target = None
-                    if split == "dev":
+                    if split != "test":
                         target = pd.Series(
-                            [item.target for item in dataset.examples("dev", labeled=True)]
+                            [item.target for item in dataset.examples(role, labeled=True)]
                         )
                     else:
                         truth = config["data"].get("test_ground_truth")
@@ -256,12 +263,24 @@ def run_text_experiment(config: dict) -> Path:
                         tracker.metrics("development" if split == "dev" else split, metrics)
             metadata = model.run_metadata()
             runtime = {
+                "preparation_seconds": preparation_seconds,
+                "loading_seconds": loading_seconds,
+                "tokenization_seconds": tokenization_seconds,
                 "fit_seconds": fit_seconds,
                 "predict_seconds": predict_seconds,
                 "total_seconds": time.perf_counter() - started,
                 "device": device,
                 **cuda_peak_memory(device),
             }
+            responses = [json.loads(line) for split in evaluation_splits
+                         if (artifacts.path / f"responses_{split}.jsonl").is_file()
+                         for line in (artifacts.path / f"responses_{split}.jsonl").read_text().splitlines()]
+            if responses:
+                lengths = [item["prompt_tokens"] for item in responses]
+                runtime.update(predicted_participants=len(responses), prompt_tokens=sum(lengths),
+                               prompt_tokens_max=max(lengths), prompt_tokens_mean=float(np.mean(lengths)),
+                               participants_per_second=len(responses) / predict_seconds if predict_seconds else 0,
+                               prompt_tokens_per_second=sum(lengths) / predict_seconds if predict_seconds else 0)
             artifacts.json("runtime.json", runtime)
             artifacts.json("model_metadata.json", metadata)
             tracker.metrics("runtime", runtime)

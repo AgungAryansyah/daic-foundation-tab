@@ -90,6 +90,19 @@ def test_lora_updates_only_adapters_and_reload_reproduces_predictions(tmp_path):
     )
 
 
+def test_checkpointed_lora_training_keeps_base_weights_frozen(tmp_path):
+    import torch
+
+    adapter = tiny_adapter(tmp_path, mode="fine_tuning")
+    adapter.parameters["gradient_checkpointing"] = True
+    original = [(parameter, parameter.detach().clone()) for parameter in adapter.model.parameters()]
+    adapter.fit(examples(), [TextExample("dev0", "Tired", 0), TextExample("dev1", "Well", 1)],
+                tmp_path / "checkpoints")
+    assert adapter.run_metadata()["gradient_checkpointing"]
+    assert adapter.optimizer_steps == 2
+    assert all(torch.equal(parameter, old) for parameter, old in original)
+
+
 def test_resume_checks_identity_and_continues_optimizer_steps(tmp_path):
     adapter = tiny_adapter(tmp_path, mode="fine_tuning")
     validation = [TextExample("dev0", "Tired", 0), TextExample("dev1", "Well", 1)]
