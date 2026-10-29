@@ -127,20 +127,25 @@ def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str) -> Pa
     logger = configure_run_logger(directory / f"{task}-{stage}.log", "INFO")
     status_path = directory / f"{task}-{stage}.status.json"
     _json(status_path, {"status": "running", "task": task, "stage": stage})
+    destination = None
     try:
         require_cuda_device("cuda:0")
-        require_capacity({"peak_process_ram_mb": 2048 / 1.2, "peak_cuda_reserved_mb": 8192 / 1.2})
         identity = profile_identity(study, audit, host, task, stage)
+        destination = profile_path(host, identity)
+        _json(destination, {"version": 1, "status": "running", "identity": identity})
+        require_capacity({"peak_process_ram_mb": 2048 / 1.2, "peak_cuda_reserved_mb": 8192 / 1.2})
         with phase(logger, "full-checkpoint transcript preflight"):
             measured = _probe(context, audit, host, task, stage, logger)
         profile = {"version": 1, "status": "passed", "identity": identity, **measured,
                    "memory": memory_snapshot()}
         profile["profile_id"] = fingerprint(profile)
-        destination = profile_path(host, identity)
         _json(destination, profile)
         _json(status_path, {"status": "passed", "profile": str(destination)})
         return destination
     except BaseException as error:
+        if destination is not None:
+            _json(destination, {"version": 1, "status": "failed", "identity": identity,
+                                "error_type": type(error).__name__})
         _json(status_path, {"status": "failed", "error_type": type(error).__name__, "error": str(error)})
         raise
 

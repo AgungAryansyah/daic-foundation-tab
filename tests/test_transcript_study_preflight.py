@@ -125,3 +125,26 @@ def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_
     peaks = preflight._probe(context, audit, host, "classification", "cv", logger)
     assert peaks["peak_process_ram_mb"] == 500 and peaks["peak_cuda_reserved_mb"] == 1000
     assert calls == [("frozen_icl", 2), ("fine_tuning", 0)]
+
+
+def test_failed_repeat_probe_invalidates_a_previous_success(tmp_path, monkeypatch):
+    from tests.test_transcript_study_groups import host_input
+
+    mock_hardware(monkeypatch)
+    bundle, host_path = prepared_input(tmp_path), host_input(tmp_path)
+    monkeypatch.setattr(preflight, "require_cuda_device", lambda device: device)
+    monkeypatch.setattr(preflight, "require_capacity", lambda profile: None)
+    monkeypatch.setattr(preflight, "_probe", lambda *args: {"peak_process_ram_mb": 512, "peak_cuda_reserved_mb": 1024})
+    output = preflight.preflight_worker(bundle, host_path, "classification", "cv")
+    context, host = read_bundle(bundle), resources.load_host(host_path)
+    assert preflight.require_preflight(bundle, context, host, "classification", "cv")["status"] == "passed"
+
+    def fail(*args):
+        raise RuntimeError("probe failed")
+
+    monkeypatch.setattr(preflight, "_probe", fail)
+    with pytest.raises(RuntimeError, match="probe failed"):
+        preflight.preflight_worker(bundle, host_path, "classification", "cv")
+    assert json.loads(output.read_text())["status"] == "failed"
+    with pytest.raises(ValueError, match="failed, changed"):
+        preflight.require_preflight(bundle, context, host, "classification", "cv")
