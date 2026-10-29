@@ -5,7 +5,6 @@ import fcntl
 import subprocess
 import sys
 import time
-from importlib.metadata import version
 from pathlib import Path
 
 from daic_foundation_tab.runner import _git_commit
@@ -17,6 +16,7 @@ from .condition import run_condition
 from .preflight import require_preflight
 from .resources import (
     configure_threads,
+    dependency_versions,
     load_host,
     memory_snapshot,
     observe_resources,
@@ -57,7 +57,7 @@ def condition_worker(bundle: Path, host_path: Path, condition_id: str, stage: st
         return existing
     logger = configure_run_logger(root / "worker.log", "INFO")
     environment = {"host_label": host["host_label"], "cpu_threads": host["cpu_threads"], "git_commit": _git_commit(),
-                   "dependency_versions": {name: version(name) for name in ("torch", "transformers", "peft", "numpy", "pandas")},
+                   "dependency_versions": dependency_versions(),
                    "container_ram_limit_mb": memory_snapshot()["container_ram_limit_mb"]}
     with observe_resources(logger):
         output = run_condition(bundle, condition, host, resume=_resume_candidate(root, condition),

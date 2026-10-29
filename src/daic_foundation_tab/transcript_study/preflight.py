@@ -74,7 +74,7 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
         dataset = dataset_for(context, condition)
         config = execution_config(study, condition, host)
         config["tracking"]["wandb"].update(enabled=False, mode="disabled")
-        config["model"]["parameters"].update(epochs=1, gradient_accumulation_steps=1, checkpoint_steps=1)
+        config["model"]["parameters"].update(epochs=2, gradient_accumulation_steps=1, checkpoint_steps=1)
         set_global_seed(condition["model_seed"])
         reset_cuda_peak_memory("cuda:0")
         with phase(logger, f"preflighting {mode}"), observe_resources(logger) as resources:

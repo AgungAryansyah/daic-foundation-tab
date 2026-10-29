@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -54,3 +55,73 @@ def test_worker_environment_limits_all_cpu_libraries():
     assert all(environment[key] == "1" for key in resources.THREAD_VARIABLES)
     assert environment["MALLOC_ARENA_MAX"] == "2"
     assert resources.worker_environment({"cpu_threads": 3})["OMP_NUM_THREADS"] == "3"
+
+
+def test_preflight_rejects_dependencies_outside_the_lock(monkeypatch):
+    monkeypatch.setattr(resources, "version", lambda package: "0.0.0")
+    with pytest.raises(ValueError, match="do not match uv.lock"):
+        resources.dependency_versions()
+
+
+def test_nested_cgroups_use_the_most_restrictive_available_capacity(tmp_path):
+    mount = tmp_path / "cgroup"
+    child = mount / "job/step"
+    child.mkdir(parents=True)
+    membership = tmp_path / "membership"
+    membership.write_text("0::/job/step\n")
+    for directory, maximum, current, inactive in ((mount, 16000, 15000, 3000), (child, 8000, 7500, 1000)):
+        (directory / "memory.max").write_text(str(maximum))
+        (directory / "memory.current").write_text(str(current))
+        (directory / "memory.stat").write_text(f"inactive_file {inactive}\n")
+    assert resources._cgroup_capacity(mount, membership) == (8000, 1500)
+
+
+def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_path, monkeypatch):
+    import torch
+
+    from daic_foundation_tab.models.text_base import TextPrediction
+
+    bundle = prepared_input(tmp_path)
+    context = read_bundle(bundle)
+    audit = require_audit(bundle, context[0])
+    host = {"output_root": str(tmp_path / "runs"), "host_label": "test", "wandb": {"mode": "disabled"}}
+    (tmp_path / "runs").mkdir()
+    calls = []
+
+    class Model:
+        def __init__(self, config):
+            self.config = config
+
+        def prepare(self, demonstrations):
+            calls.append((self.config["experiment"]["mode"], len(demonstrations)))
+
+        def run_metadata(self):
+            return {"checkpoint_revision": self.config["model"]["revision"]}
+
+        def preflight(self, examples):
+            assert examples
+
+        def fit(self, training, validation, directory, progress):
+            assert self.config["model"]["parameters"]["epochs"] == 2
+            assert len(training) == 1 and len(validation) == 2
+            assert all(x.target is not None for x in [*training, *validation])
+            progress(2, 2)
+
+        def predict(self, examples):
+            assert all(x.target is None for x in examples)
+            return [TextPrediction(1, .75, "1", 100)]
+
+    @contextmanager
+    def monitor(logger):
+        yield {"peak_process_ram_mb": 500}
+
+    monkeypatch.setattr(preflight, "create_text_model", Model)
+    monkeypatch.setattr(preflight, "observe_resources", monitor)
+    monkeypatch.setattr(preflight, "reset_cuda_peak_memory", lambda device: None)
+    monkeypatch.setattr(preflight, "cuda_peak_memory", lambda device: {"peak_cuda_reserved_mb": 1000, "peak_cuda_allocated_mb": 900})
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: None)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+    logger = SimpleNamespace(info=lambda *args: None, exception=lambda *args: None)
+    peaks = preflight._probe(context, audit, host, "classification", "cv", logger)
+    assert peaks["peak_process_ram_mb"] == 500 and peaks["peak_cuda_reserved_mb"] == 1000
+    assert calls == [("frozen_icl", 2), ("fine_tuning", 0)]
