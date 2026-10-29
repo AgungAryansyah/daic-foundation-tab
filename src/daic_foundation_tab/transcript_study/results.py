@@ -59,6 +59,8 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
         raise ValueError("Transcript adapter checkpoint provenance is invalid")
     if checkpoints and not any(name.endswith("adapter_config.json") for name in checkpoints):
         raise ValueError("Selected adapter configuration is missing")
+    if checkpoints and not any(name.endswith(("adapter_model.safetensors", "adapter_model.bin")) for name in checkpoints):
+        raise ValueError("Selected adapter weights are missing")
     for name, digest in checkpoints.items():
         path = (output / name).resolve()
         if (not path.is_relative_to(output / "checkpoints/best_adapter")
@@ -80,8 +82,12 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
         if record.get(key) != expected_value:
             raise ValueError("Transcript lifecycle provenance mismatch")
     metadata = json.loads((output / "model_metadata.json").read_text())
-    if metadata["checkpoint_revision"] != expected["model"]["revision"]:
+    if metadata["checkpoint_revision"] != expected["model"]["revision"] or metadata["model_id"] != expected["model"]["model_id"]:
         raise ValueError("Transcript model checkpoint revision differs")
+    if (metadata.get("base_parameters_frozen") is not True
+            or metadata.get("adaptation") != ("lora" if condition["mode"] == "fine_tuning" else "frozen_icl")
+            or (metadata.get("optimizer_steps", 0) > 0) != (condition["mode"] == "fine_tuning")):
+        raise ValueError("Transcript adaptation metadata contradicts the executed method")
     tracking = json.loads((output / "wandb_run.json").read_text())
     if config["tracking"]["wandb"]["enabled"] and (
         tracking.get("status") != "completed" or not tracking.get("run_id")
