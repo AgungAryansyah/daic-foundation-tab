@@ -63,6 +63,15 @@ def test_frozen_scoring_preserves_weights_and_blocks_demonstration_leakage(tmp_p
         adapter.fit(examples(), examples(), tmp_path / "checkpoints")
 
 
+def test_transcript_campaign_source_changes_invalidate_token_cache(tmp_path):
+    for identity in ("source-one", "source-two"):
+        adapter = tiny_adapter(tmp_path)
+        adapter.config["study"] = {"transcript_study_id": "study", "software_identity": identity}
+        adapter.prepare([])
+        adapter.predict([TextExample("query", "The same interview")])
+    assert len(list((tmp_path / "cache/text_tokens").glob("*.json"))) == 2
+
+
 def test_lora_updates_only_adapters_and_reload_reproduces_predictions(tmp_path):
     import torch
 

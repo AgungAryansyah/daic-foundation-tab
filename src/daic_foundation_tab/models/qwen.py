@@ -63,11 +63,14 @@ class QwenTextModel:
             raise ValueError("A tokenizer and immutable model revision are required")
         self.model.requires_grad_(False)
         self.model.eval()
+        identity = {"model_id": self.config["model"]["model_id"], "revision": self.revision}
+        if self.config.get("study", {}).get("transcript_study_id"):
+            identity["software_identity"] = self.config["study"]["software_identity"]
         self.encoder = PromptEncoder(
             self.tokenizer,
             self.task,
             self.parameters,
-            {"model_id": self.config["model"]["model_id"], "revision": self.revision},
+            identity,
             Path(self.config["project"]["cache_root"]) / "text_tokens",
         )
 
