@@ -28,9 +28,16 @@ def transcript_input(tmp_path, dataset_id="edaic"):
     table = pd.read_parquet(parent / "features.parquet")
     root = Path(raw["data"]["root"])
     for participant in table["participant_id"].astype(str):
-        (root / "data" / f"{participant}_TRANSCRIPT.csv").write_text(
-            "speaker\tvalue\nEllie\tHow are you?\nParticipant\tI feel tired.\n"
-        )
+        if dataset_id == "edaic":
+            folder = root / "data" / f"{participant}_P"
+            folder.mkdir()
+            (folder / f"{participant}_Transcript.csv").write_text(
+                "Start_Time,End_Time,Text,Confidence\n1,2,I feel tired.,0.9\n"
+            )
+        else:
+            (root / "data" / f"{participant}_TRANSCRIPT.csv").write_text(
+                "speaker\tvalue\nEllie\tHow are you?\nParticipant\tI feel tired.\n"
+            )
     config = tmp_path / "transcript.yaml"
     config.write_text(yaml.safe_dump({
         "extends": str(ROOT / f"configs/studies/{dataset_id}_transcript_cv.yaml"),
@@ -49,6 +56,7 @@ def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id
     study, rows, texts, folds = context = read_bundle(bundle)
     assert len(study["conditions"]["cv"]) == 20
     assert len(study["conditions"]["final"]) == 4
+    assert study["configuration"]["data"]["transcripts"]["format"] == dataset_id
     assert json.loads((parent / "folds.json").read_text()) == folds
     assert all(text == "I feel tired." for text in texts.values())
     assert all(row["target_phq8"] is None for row in rows if row["split"] == "test")
@@ -68,16 +76,18 @@ def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id
 @pytest.mark.parametrize("problem", ["missing", "duplicate", "empty"])
 def test_transcript_preparation_rejects_incomplete_sources(tmp_path, problem):
     config, parent, root = transcript_input(tmp_path)
-    path = next((root / "data").glob("*_TRANSCRIPT.csv"))
+    path = next((root / "data").rglob("*_Transcript.csv"))
     if problem == "missing":
         path.unlink()
     elif problem == "duplicate":
         raw = yaml.safe_load(config.read_text())
-        raw["data"]["transcripts"] = {"pattern": "data/{participant_id}_TRANSCRIPT*.csv"}
+        raw["data"]["transcripts"] = {
+            "pattern": "data/{participant_id}_P/{participant_id}_Transcript*.csv"
+        }
         config.write_text(yaml.safe_dump(raw))
         shutil.copyfile(path, path.with_name(path.stem + "_duplicate.csv"))
     else:
-        path.write_text("speaker\tvalue\nParticipant\t\n")
+        path.write_text("Start_Time,End_Time,Text,Confidence\n1,2,,0.9\n")
     with pytest.raises(ValueError, match="exactly one|Empty selected"):
         prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
 
@@ -86,8 +96,8 @@ def test_changed_transcripts_invalidate_identity_and_bundle(tmp_path):
     config, parent, root = transcript_input(tmp_path)
     bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
     old = read_bundle(bundle)[0]["study_id"]
-    next((root / "data").glob("*_TRANSCRIPT.csv")).write_text(
-        "speaker\tvalue\nParticipant\tDifferent speech.\n"
+    next((root / "data").rglob("*_Transcript.csv")).write_text(
+        "Start_Time,End_Time,Text,Confidence\n1,2,Different speech.,0.9\n"
     )
     other = prepare_bundle(config, parent, tmp_path / "different", tokenizer=TinyTokenizer())
     assert read_bundle(other)[0]["study_id"] != old

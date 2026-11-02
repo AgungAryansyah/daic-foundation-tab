@@ -38,44 +38,56 @@ class TranscriptDataset:
         ]
 
 
+def _input_format(settings: dict) -> str:
+    if settings.get("speaker_policy", "participant_only") != "participant_only":
+        raise TranscriptError("Transcript input requires speaker_policy=participant_only")
+    input_format = settings.get("format", "daic_woz")
+    if input_format not in {"daic_woz", "edaic"}:
+        raise TranscriptError("Transcript format must be daic_woz or edaic")
+    return input_format
+
+
 def read_transcript(path: Path, settings: dict) -> str:
     if any(part.startswith("._") for part in path.parts):
         raise TranscriptError("Filesystem metadata is not a transcript")
-    if settings.get("speaker_policy", "participant_only") != "participant_only":
-        raise TranscriptError("Transcript input requires speaker_policy=participant_only")
+    input_format = _input_format(settings)
     columns = settings.get("columns", {})
     speaker_column = columns.get("speaker", "speaker")
-    text_column = columns.get("text", "value")
+    text_column = columns.get("text", "Text" if input_format == "edaic" else "value")
     try:
         frame = pd.read_csv(
             path,
-            sep=settings.get("delimiter", "\t"),
+            sep=settings.get("delimiter", "," if input_format == "edaic" else "\t"),
             encoding=settings.get("encoding", "utf-8-sig"),
             dtype=str,
             keep_default_na=False,
         )
     except (ValueError, UnicodeError, pd.errors.ParserError) as error:
         raise TranscriptError(f"Cannot parse transcript {path.name}") from error
-    if not {speaker_column, text_column} <= set(frame.columns):
-        raise TranscriptError(f"Missing speaker/text columns in {path.name}")
-    participant = {
-        str(x).strip().lower() for x in settings.get("participant_speakers", ["Participant"])
-    }
-    interviewer = {
-        str(x).strip().lower()
-        for x in settings.get("interviewer_speakers", ["Ellie", "Interviewer"])
-    }
-    if participant & interviewer:
-        raise TranscriptError("Participant and interviewer speaker labels overlap")
-    utterances = []
-    for speaker, text in frame[[speaker_column, text_column]].itertuples(index=False, name=None):
-        speaker = speaker.strip().lower()
-        text = " ".join(text.split())
-        if speaker not in participant | interviewer:
-            raise TranscriptError(f"Unrecognized speaker in {path.name}")
-        if not text or speaker not in participant:
-            continue
-        utterances.append(text)
+    required = {text_column} if input_format == "edaic" else {speaker_column, text_column}
+    if not required <= set(frame.columns):
+        description = "text" if input_format == "edaic" else "speaker/text"
+        raise TranscriptError(f"Missing {description} columns in {path.name}")
+    if input_format == "edaic":
+        selected = frame[text_column].tolist()
+    else:
+        participant = {
+            str(x).strip().lower() for x in settings.get("participant_speakers", ["Participant"])
+        }
+        interviewer = {
+            str(x).strip().lower()
+            for x in settings.get("interviewer_speakers", ["Ellie", "Interviewer"])
+        }
+        if participant & interviewer:
+            raise TranscriptError("Participant and interviewer speaker labels overlap")
+        selected = []
+        for speaker, text in frame[[speaker_column, text_column]].itertuples(index=False, name=None):
+            speaker = speaker.strip().lower()
+            if speaker not in participant | interviewer:
+                raise TranscriptError(f"Unrecognized speaker in {path.name}")
+            if speaker in participant:
+                selected.append(text)
+    utterances = [" ".join(text.split()) for text in selected if text.strip()]
     if not utterances:
         raise TranscriptError(f"Empty selected transcript in {path.name}")
     return "\n".join(utterances)
@@ -87,8 +99,7 @@ def load_transcripts(
     manifest_path = config["experiment"].get("partition_manifest")
     manifest = load_manifest(manifest_path, config) if manifest_path else prepare_manifest(config)
     settings = config["data"]["transcripts"]
-    if settings.get("speaker_policy", "participant_only") != "participant_only":
-        raise TranscriptError("Transcript input requires speaker_policy=participant_only")
+    _input_format(settings)
     root = Path(config["data"]["root"]).expanduser().resolve()
     selected = manifest["participants"]
     cache_root = Path(config["project"]["cache_root"]).expanduser() / "transcripts"

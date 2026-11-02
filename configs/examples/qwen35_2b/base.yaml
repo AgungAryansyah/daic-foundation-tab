@@ -19,6 +19,7 @@ data:
     test: original_labels/test_split_Depression_AVEC2017.csv
   test_ground_truth: original_labels/full_test_split.csv
   transcripts:
+    format: daic_woz
     pattern: data/{participant_id}_TRANSCRIPT.csv
     delimiter: "\t"
     columns:

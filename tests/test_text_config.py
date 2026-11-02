@@ -92,6 +92,18 @@ def test_text_config_rejects_dialogue_input():
         validate_config(config)
 
 
+def test_native_edaic_format_requires_explicit_dataset_identity():
+    config = text_config()
+    config["data"]["transcripts"]["format"] = "edaic"
+    with pytest.raises(ConfigError, match="dataset_id=edaic"):
+        validate_config(config)
+    config["data"]["dataset_id"] = "edaic"
+    validate_config(config)
+    config["data"]["transcripts"]["format"] = "automatic"
+    with pytest.raises(ConfigError, match="format"):
+        validate_config(config)
+
+
 def test_removed_training_subsampling_option_is_rejected():
     config = text_config()
     config["study"] = {"label_budget": 4}

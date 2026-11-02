@@ -4,6 +4,13 @@ extends:
 
 data:
   dataset_id: edaic
+  transcripts:
+    format: edaic
+    pattern: data/{participant_id}_P/{participant_id}_Transcript.csv
+    delimiter: ","
+    columns:
+      speaker: null
+      text: Text
 
 transcript_study:
   name: edaic-transcript-cv

@@ -79,3 +79,64 @@ def test_custom_delimiter_and_column_mapping(tmp_path):
         )
         == "Hello"
     )
+
+
+def test_native_edaic_reads_text_without_speaker_labels(tmp_path):
+    path = tmp_path / "300_Transcript.csv"
+    path.write_text(
+        'Start_Time,End_Time,Text,Confidence\n'
+        '10,12,"I feel tired, most days.",0.9\n'
+        '15,18,"  Sleep   is difficult.  ",0.1\n'
+        '20,21,   ,0.8\n'
+    )
+    assert read_transcript(path, {"format": "edaic"}) == (
+        "I feel tired, most days.\nSleep is difficult."
+    )
+    with pytest.raises(TranscriptError, match="Missing speaker/text"):
+        read_transcript(path, {"delimiter": ","})
+
+
+def test_native_edaic_requires_text_column(tmp_path):
+    path = tmp_path / "300_Transcript.csv"
+    path.write_text("Start_Time,End_Time,Confidence\n1,2,0.9\n")
+    with pytest.raises(TranscriptError, match="Missing text"):
+        read_transcript(path, {"format": "edaic"})
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["Start_Time,End_Time,Text,Confidence\n1,2,   ,0.8\n", "Start_Time,End_Time,Text,Confidence\n"],
+)
+def test_native_edaic_rejects_empty_text(tmp_path, content):
+    path = tmp_path / "300_Transcript.csv"
+    path.write_text(content)
+    with pytest.raises(TranscriptError, match="Empty selected"):
+        read_transcript(path, {"format": "edaic"})
+
+
+def test_native_edaic_loading_and_source_cache_invalidation(tmp_path):
+    config = transcript_config(tmp_path)
+    config["data"]["dataset_id"] = "edaic"
+    config["data"]["transcripts"] = {
+        "format": "edaic", "pattern": "data/{participant_id}_P/{participant_id}_Transcript.csv"
+    }
+    paths = []
+    for source in (tmp_path / "data/data").glob("*_TRANSCRIPT.csv"):
+        participant = source.name.split("_")[0]
+        path = source.parent / f"{participant}_P" / f"{participant}_Transcript.csv"
+        path.parent.mkdir()
+        path.write_text("Start_Time,End_Time,Text,Confidence\n1,2,Participant speech,0.9\n")
+        paths.append(path)
+    before = load_transcripts(config)
+    assert set(before.texts.values()) == {"Participant speech"}
+    paths[0].write_text("Start_Time,End_Time,Text,Confidence\n1,2,Changed speech,0.9\n")
+    after = load_transcripts(config)
+    assert after.cache_key != before.cache_key
+    assert "Changed speech" in after.texts.values()
+
+
+def test_reader_rejects_unknown_format(tmp_path):
+    path = tmp_path / "transcript.tsv"
+    path.write_text("speaker\tvalue\nParticipant\tAnswer\n")
+    with pytest.raises(TranscriptError, match="format"):
+        read_transcript(path, {"format": "automatic"})

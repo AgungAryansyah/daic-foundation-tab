@@ -34,6 +34,12 @@ def validate_text_config(config: Mapping) -> None:
         transcript.get("speaker_policy", "participant_only") == "participant_only",
         "Transcript input requires speaker_policy=participant_only",
     )
+    input_format = transcript.get("format", "daic_woz")
+    require(input_format in {"daic_woz", "edaic"}, "Transcript format must be daic_woz or edaic")
+    require(
+        input_format != "edaic" or config["data"]["dataset_id"] == "edaic",
+        "Native E-DAIC transcripts require data.dataset_id=edaic",
+    )
     require(config["runtime"].get("require_cuda") is True, "Text runs require CUDA")
     require(config["runtime"].get("device") == "cuda:0", "runtime.device must be cuda:0")
     parameters = config["model"].get("parameters", {})
