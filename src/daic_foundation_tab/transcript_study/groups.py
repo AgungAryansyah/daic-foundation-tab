@@ -49,7 +49,7 @@ def condition_worker(bundle: Path, host_path: Path, condition_id: str, stage: st
         raise ValueError("Transcript worker condition is missing or ambiguous")
     condition = matches[0]
     require_preflight(bundle, context, host, condition["task"], stage)
-    root = Path(host["output_root"]) / context[0]["study_id"] / stage / f"qwen35_2b-{condition['task']}"
+    root = Path(host["output_root"]) / context[0]["study_id"] / stage / f"{condition['family']}-{condition['task']}"
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     host["output_root"] = str(root)
     existing = _existing(context, root, condition)
@@ -79,7 +79,7 @@ def run_group(bundle: str | Path, host_path: str | Path, task: str, *, stage: st
     context = read_bundle(bundle)
     if stage not in context[0]["conditions"] or task not in TASKS:
         raise ValueError("Unsupported transcript group task or stage")
-    root = Path(host["output_root"]) / context[0]["study_id"] / stage / f"qwen35_2b-{task}"
+    root = Path(host["output_root"]) / context[0]["study_id"] / stage / f"{context[0]['configuration']['model']['name']}-{task}"
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (root / ".run.lock").open("a") as lock:
         try:

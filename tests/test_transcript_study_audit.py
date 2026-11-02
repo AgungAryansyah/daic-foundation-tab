@@ -9,8 +9,8 @@ from tests.test_text_prompt import TinyTokenizer
 from tests.test_transcript_study_bundle import transcript_input
 
 
-def prepared_input(tmp_path):
-    config, parent, _ = transcript_input(tmp_path)
+def prepared_input(tmp_path, family="qwen35_2b"):
+    config, parent, _ = transcript_input(tmp_path, family=family)
     bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
     return bundle
 

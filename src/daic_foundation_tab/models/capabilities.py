@@ -18,6 +18,7 @@ MODEL_FAMILIES = {
         ("tabiclv2", "tabular"),
         ("kumo_medium", "tabular"),
         ("qwen35_2b", "transcript"),
+        ("qwen35_0_8b", "transcript"),
     )
 }
 

@@ -31,7 +31,7 @@ class TextTracker:
                 group=self.settings.get("group"),
                 job_type=config["experiment"].get("mode", "fine_tuning"),
                 tags=list(dict.fromkeys([
-                    "qwen35_2b", "transcript", config["experiment"]["task"],
+                    config["model"]["name"], "transcript", config["experiment"]["task"],
                     config["experiment"].get("mode", "fine_tuning"),
                     *self.settings.get("tags", []),
                 ])),

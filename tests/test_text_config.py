@@ -109,3 +109,22 @@ def test_removed_training_subsampling_option_is_rejected():
     config["study"] = {"label_budget": 4}
     with pytest.raises(ConfigError, match="was removed"):
         validate_config(config)
+
+
+@pytest.mark.parametrize("family,model_id", [
+    ("qwen35_2b", "Qwen/Qwen3.5-2B"),
+    ("qwen35_0_8b", "Qwen/Qwen3.5-0.8B"),
+])
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("mode", ["frozen_icl", "fine_tuning"])
+def test_qwen_model_sizes_validate_and_reject_mismatched_checkpoints(family, model_id, task, mode):
+    config = text_config()
+    config["model"].update(name=family, model_id=model_id)
+    config["experiment"].update(task=task, mode=mode)
+    config["evaluation"]["threshold"] = .5 if task == "classification" else None
+    validate_config(config)
+    adapter = create_text_model(config)
+    assert adapter.config["model"]["model_id"] == model_id and adapter.model is None
+    config["model"]["model_id"] = "Qwen/Qwen3.5-2B" if family == "qwen35_0_8b" else "Qwen/Qwen3.5-0.8B"
+    with pytest.raises(ConfigError, match="Use Qwen"):
+        validate_config(config)

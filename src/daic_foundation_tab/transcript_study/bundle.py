@@ -80,7 +80,7 @@ def _schedule(study_id: str, config: dict, folds: dict) -> dict:
         conditions = []
         for task, mode, seed in product(TASKS, MODES, config["transcript_study"]["model_seeds"]):
             for fold in folds[task]["folds"] if stage == "cv" else [None]:
-                condition = {"stage": stage, "family": "qwen35_2b", "modality": "transcript", "task": task,
+                condition = {"stage": stage, "family": config["model"]["name"], "modality": "transcript", "task": task,
                                  "mode": mode, "model_seed": seed, "fold": fold["fold"] if fold else None}
                 conditions.append({**condition, "condition_id": fingerprint({"study_id": study_id, **condition})})
         result[stage] = conditions

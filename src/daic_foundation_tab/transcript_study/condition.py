@@ -29,7 +29,7 @@ def execution_config(study: dict, condition: dict, host: dict) -> dict:
         "transcript_study_id": study["study_id"], "parent_study_id": study["parent_study_id"],
         "software_identity": study["software_identity"], "condition_id": condition["condition_id"],
         "stage": condition["stage"], "fold": condition["fold"], "model_seed": condition["model_seed"],
-        "host_label": host["host_label"], "execution_group": f"qwen35_2b-{condition['task']}",
+        "host_label": host["host_label"], "execution_group": f"{condition['family']}-{condition['task']}",
         "cpu_threads": host.get("cpu_threads", 1),
     }
     return config

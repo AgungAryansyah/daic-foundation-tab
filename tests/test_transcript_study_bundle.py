@@ -19,7 +19,7 @@ from tests.test_text_prompt import TinyTokenizer
 ROOT = Path(__file__).parents[1]
 
 
-def transcript_input(tmp_path, dataset_id="edaic"):
+def transcript_input(tmp_path, dataset_id="edaic", family="qwen35_2b"):
     source = study_input(tmp_path)
     raw = yaml.safe_load(source.read_text())
     raw["data"]["dataset_id"] = dataset_id
@@ -45,15 +45,22 @@ def transcript_input(tmp_path, dataset_id="edaic"):
         "tracking": {"wandb": {"enabled": False, "mode": "disabled"}},
         "transcript_study": {"bootstrap_iterations": 5},
     }))
+    if family == "qwen35_0_8b":
+        raw = yaml.safe_load(config.read_text())
+        raw["model"] = {"name": family, "model_id": "Qwen/Qwen3.5-0.8B",
+                        "revision": "2fc06364715b967f1860aea9cf38778875588b17"}
+        config.write_text(yaml.safe_dump(raw))
     return config, parent, root
 
 
+@pytest.mark.parametrize("family", ["qwen35_2b", "qwen35_0_8b"])
 @pytest.mark.parametrize("dataset_id", ["edaic", "daic_woz"])
-def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id):
-    config, parent, _ = transcript_input(tmp_path, dataset_id)
+def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id, family):
+    config, parent, _ = transcript_input(tmp_path, dataset_id, family)
     original = {p.name: p.read_bytes() for p in parent.iterdir() if p.is_file()}
     bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
     study, rows, texts, folds = context = read_bundle(bundle)
+    assert {c["family"] for stage in study["conditions"].values() for c in stage} == {family}
     assert len(study["conditions"]["cv"]) == 20
     assert len(study["conditions"]["final"]) == 4
     assert study["configuration"]["data"]["transcripts"]["format"] == dataset_id

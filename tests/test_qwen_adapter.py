@@ -8,7 +8,7 @@ from tests.test_text_config import text_config
 from tests.test_text_prompt import TinyTokenizer
 
 
-def tiny_adapter(tmp_path, *, mode="frozen_icl", task="classification", device="cpu"):
+def tiny_adapter(tmp_path, *, mode="frozen_icl", task="classification", device="cpu", family="qwen35_2b"):
     torch = pytest.importorskip("torch")
     pytest.importorskip("peft")
     transformers = pytest.importorskip("transformers")
@@ -33,6 +33,8 @@ def tiny_adapter(tmp_path, *, mode="frozen_icl", task="classification", device="
     )
     model = transformers.Qwen3_5ForCausalLM(model_config).to(device)
     config = text_config()
+    model_id = "Qwen/Qwen3.5-0.8B" if family == "qwen35_0_8b" else "Qwen/Qwen3.5-2B"
+    config["model"].update(name=family, model_id=model_id)
     config["project"]["cache_root"] = str(tmp_path / "cache")
     config["experiment"].update(task=task, mode=mode)
     config["evaluation"]["threshold"] = 0.5 if task == "classification" else None
@@ -44,14 +46,16 @@ def examples():
     return [TextExample("train0", "I feel tired", 0), TextExample("train1", "I feel well", 1)]
 
 
-def test_frozen_scoring_preserves_weights_and_blocks_demonstration_leakage(tmp_path):
+@pytest.mark.parametrize("family", ["qwen35_2b", "qwen35_0_8b"])
+def test_frozen_scoring_preserves_weights_and_blocks_demonstration_leakage(tmp_path, family):
     import torch
 
-    adapter = tiny_adapter(tmp_path)
+    adapter = tiny_adapter(tmp_path, family=family)
     before = [parameter.detach().clone() for parameter in adapter.model.parameters()]
     adapter.prepare(examples()[:1])
     prediction = adapter.predict([TextExample("dev", "I feel sad")])[0]
     assert 0 <= prediction.probability_positive <= 1
+    assert adapter.run_metadata()["model_name"] == family
     assert adapter.run_metadata()["optimizer_steps"] == 0
     assert not any(parameter.requires_grad for parameter in adapter.model.parameters())
     assert all(
@@ -72,10 +76,11 @@ def test_transcript_campaign_source_changes_invalidate_token_cache(tmp_path):
     assert len(list((tmp_path / "cache/text_tokens").glob("*.json"))) == 2
 
 
-def test_lora_updates_only_adapters_and_reload_reproduces_predictions(tmp_path):
+@pytest.mark.parametrize("family", ["qwen35_2b", "qwen35_0_8b"])
+def test_lora_updates_only_adapters_and_reload_reproduces_predictions(tmp_path, family):
     import torch
 
-    adapter = tiny_adapter(tmp_path, mode="fine_tuning")
+    adapter = tiny_adapter(tmp_path, mode="fine_tuning", family=family)
     original = [(parameter, parameter.detach().clone()) for parameter in adapter.model.parameters()]
     validation = [TextExample("dev0", "Tired", 0), TextExample("dev1", "Well", 1)]
     history = []
@@ -92,7 +97,7 @@ def test_lora_updates_only_adapters_and_reload_reproduces_predictions(tmp_path):
         for name, parameter in adapter.model.named_parameters()
     )
     before = adapter.predict(validation)
-    loaded = tiny_adapter(tmp_path / "reloaded", mode="fine_tuning")
+    loaded = tiny_adapter(tmp_path / "reloaded", mode="fine_tuning", family=family)
     loaded.load_adapter(tmp_path / "checkpoints/best_adapter")
     assert [item.probability_positive for item in loaded.predict(validation)] == pytest.approx(
         [item.probability_positive for item in before]

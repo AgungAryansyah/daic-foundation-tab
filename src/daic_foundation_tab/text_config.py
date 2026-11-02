@@ -26,7 +26,11 @@ def validate_text_config(config: Mapping) -> None:
     require(capability.input_kind == "transcript", "Transcript input requires a text model")
     require(task in capability.tasks, "Unsupported transcript task")
     require(mode in capability.modes, "Unsupported transcript adaptation mode")
-    require(config["model"].get("model_id") == "Qwen/Qwen3.5-2B", "Use Qwen/Qwen3.5-2B")
+    expected_model = {
+        "qwen35_2b": "Qwen/Qwen3.5-2B",
+        "qwen35_0_8b": "Qwen/Qwen3.5-0.8B",
+    }[capability.family]
+    require(config["model"].get("model_id") == expected_model, f"Use {expected_model}")
     require(bool(config["data"].get("dataset_id")), "data.dataset_id is required")
     transcript = config["data"].get("transcripts", {})
     require(bool(transcript.get("pattern")), "data.transcripts.pattern is required")

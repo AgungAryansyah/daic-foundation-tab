@@ -29,6 +29,8 @@ def install_model(monkeypatch):
         model.fit = fit
         metadata = model.run_metadata
         model.run_metadata = lambda: {**metadata(), "checkpoint_revision": config["model"]["revision"],
+                                      "model_id": config["model"]["model_id"],
+                                      "model_name": config["model"]["name"],
                                       "base_parameters_frozen": True}
         return model
 

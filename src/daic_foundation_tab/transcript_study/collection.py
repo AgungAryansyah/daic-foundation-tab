@@ -100,7 +100,7 @@ def _compare_tabular(context: tuple, oof: dict, report: Path, destination: Path,
     rows = []
     for identity, group in summary.groupby(keys, sort=True):
         family, modality, task, mode, seed = identity
-        key = ("qwen35_2b", "transcript", task, mode, seed)
+        key = (study["configuration"]["model"]["name"], "transcript", task, mode, seed)
         if key not in oof:
             continue
         names = group["predictions_file"].unique()
@@ -123,7 +123,7 @@ def _compare_tabular(context: tuple, oof: dict, report: Path, destination: Path,
             difference["tabular_value"] = difference.pop("frozen_icl")
             difference["transcript_value"] = difference.pop("fine_tuning")
             difference["delta_transcript_minus_tabular"] = difference.pop("delta_ft_minus_icl")
-            rows.append({"tabular_family": family, "tabular_modality": modality, "transcript_family": "qwen35_2b",
+            rows.append({"tabular_family": family, "tabular_modality": modality, "transcript_family": key[0],
                          "task": task, "mode": mode, "model_seed": seed,
                          "interpretation": "model and input both differ", **difference})
     pd.DataFrame(rows).to_csv(destination / "cross_input_comparisons.csv", index=False)

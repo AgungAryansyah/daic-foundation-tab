@@ -8,6 +8,7 @@ from daic_foundation_tab.config import deep_merge, load_config, validate_config,
 from daic_foundation_tab.data.labels import load_official_labels
 from daic_foundation_tab.data.participants import fingerprint, prepare_manifest
 from daic_foundation_tab.data.transcripts import load_transcripts
+from daic_foundation_tab.models.capabilities import model_capabilities
 from daic_foundation_tab.tracking.logging import configure_run_logger, log_progress, phase
 
 FAMILIES = ("tabpfn35", "tabiclv2", "kumo_medium", "qwen35_2b")
@@ -25,9 +26,10 @@ def condition_configs(path: str | Path) -> list[tuple[str, dict]]:
         raise ValueError("Matched studies require data.dataset_id")
     profiles = (path.parent / settings["tabular_profiles"]).resolve()
     text_profile = load_config(path.parent / settings["text_profile"])
+    text_family = model_capabilities(text_profile["model"]["name"]).family
     conditions = []
     for task in TASKS:
-        for family in FAMILIES:
+        for family in (*FAMILIES[:-1], text_family):
             for mode in MODES:
                 name = f"{task}_{family}_{mode}"
                 config = deepcopy(base)
@@ -44,7 +46,7 @@ def condition_configs(path: str | Path) -> list[tuple[str, dict]]:
                     "required_inputs": ["tabular", "transcript"],
                     "feature_set": "audio_visual",
                 }
-                is_text = family == "qwen35_2b"
+                is_text = family == text_family
                 config["input"] = {"kind": "transcript" if is_text else "tabular"}
                 if is_text:
                     config["model"] = deepcopy(text_profile["model"])

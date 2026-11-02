@@ -344,7 +344,7 @@ class QwenTextModel:
 
     def run_metadata(self) -> dict:
         return {
-            "model_name": "qwen35_2b",
+            "model_name": self.config["model"]["name"],
             "model_id": self.config["model"]["model_id"],
             "checkpoint_revision": self.revision,
             "adaptation": "lora" if self.mode == "fine_tuning" else "frozen_icl",

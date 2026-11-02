@@ -11,8 +11,8 @@ from tests.test_transcript_study_audit import prepared_input
 from tests.test_transcript_study_groups import host_input, install_model
 
 
-def completed_campaign(tmp_path, monkeypatch, *, stage="cv"):
-    bundle, host = prepared_input(tmp_path), host_input(tmp_path)
+def completed_campaign(tmp_path, monkeypatch, *, stage="cv", family="qwen35_2b"):
+    bundle, host = prepared_input(tmp_path, family), host_input(tmp_path)
     install_model(monkeypatch)
     monkeypatch.setattr(groups, "_run_subprocess", lambda bundle, path, condition, host:
                         groups.condition_worker(bundle, path, condition["condition_id"], condition["stage"]))
@@ -21,12 +21,17 @@ def completed_campaign(tmp_path, monkeypatch, *, stage="cv"):
     return bundle, tmp_path / "runs"
 
 
-def test_complete_collection_covers_each_participant_once_and_pairs_methods(tmp_path, monkeypatch):
-    bundle, runs = completed_campaign(tmp_path, monkeypatch)
+@pytest.mark.parametrize("family", ["qwen35_2b", "qwen35_0_8b"])
+def test_complete_collection_covers_each_participant_once_and_pairs_methods(tmp_path, monkeypatch, family):
+    bundle, runs = completed_campaign(tmp_path, monkeypatch, family=family)
     report = collect_study(bundle, [runs], tmp_path / "report")
     coverage = json.loads((report / "coverage.json").read_text())
     assert coverage["status"] == "completed" and coverage["completed"] == 20
-    assert len(pd.read_csv(report / "condition_metrics.csv")) == 20
+    metrics = pd.read_csv(report / "condition_metrics.csv")
+    assert len(metrics) == 20 and set(metrics["family"]) == {family}
+    assert (runs / read_bundle(bundle)[0]["study_id"] / "cv" / f"{family}-classification").is_dir()
+    for record in runs.rglob("study_run.json"):
+        assert json.loads(record.read_text())["execution_group"].startswith(family)
     for path in (report / "oof_predictions").glob("*.csv"):
         table = pd.read_csv(path)
         assert len(table) == 30 and not table["participant_id"].duplicated().any()
@@ -59,8 +64,9 @@ def test_final_collection_retains_unlabeled_test_predictions(tmp_path, monkeypat
     assert set(differences["split"]) == {"dev"}
 
 
-def test_cross_input_comparison_requires_exact_parent_participants_targets_and_folds(tmp_path, monkeypatch):
-    bundle, runs = completed_campaign(tmp_path, monkeypatch)
+@pytest.mark.parametrize("family", ["qwen35_2b", "qwen35_0_8b"])
+def test_cross_input_comparison_requires_exact_parent_participants_targets_and_folds(tmp_path, monkeypatch, family):
+    bundle, runs = completed_campaign(tmp_path, monkeypatch, family=family)
     transcript_report = collect_study(bundle, [runs], tmp_path / "report")
     tabular = tmp_path / "tabular-report"
     shutil.copytree(transcript_report, tabular)
@@ -72,6 +78,7 @@ def test_cross_input_comparison_requires_exact_parent_participants_targets_and_f
     summary.to_csv(tabular / "cv_summary.csv", index=False)
     report = collect_study(bundle, [runs], tmp_path / "matched", tabular_report=tabular)
     comparisons = pd.read_csv(report / "cross_input_comparisons.csv")
+    assert set(comparisons["transcript_family"]) == {family}
     assert comparisons["delta_transcript_minus_tabular"].eq(0).all()
     assert comparisons["interpretation"].eq("model and input both differ").all()
     path = tabular / summary.iloc[0]["predictions_file"]
