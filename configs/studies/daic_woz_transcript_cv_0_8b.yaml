@@ -1,0 +1,9 @@
+extends: daic_woz_transcript_cv.yaml
+
+model:
+  name: qwen35_0_8b
+  model_id: Qwen/Qwen3.5-0.8B
+  revision: 2fc06364715b967f1860aea9cf38778875588b17
+
+transcript_study:
+  name: daic-woz-transcript-cv-0-8b

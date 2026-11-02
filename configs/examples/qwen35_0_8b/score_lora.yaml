@@ -1,0 +1,6 @@
+extends: base.yaml
+experiment:
+  task: regression
+  mode: fine_tuning
+evaluation:
+  threshold: null

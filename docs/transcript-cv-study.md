@@ -4,6 +4,27 @@ The transcript campaign compares Qwen3.5-2B frozen in-context learning (ICL) wit
 
 Use `configs/studies/edaic_transcript_cv.yaml` or `configs/studies/daic_woz_transcript_cv.yaml`. Both retain full participant speech, two seeded ICL demonstrations, BF16, and the pinned Qwen3.5-2B checkpoint. Thinking and quantization remain disabled. LoRA uses five epochs, rank 8, alpha 16, dropout 0, all-linear targets, learning rate 0.0002, one interview per microbatch, and gradient accumulation across four microbatches. Non-reentrant gradient checkpointing reduces activation memory. The base model stays frozen.
 
+Qwen3.5-0.8B is an optional model for the same experiment. Select one preset per campaign:
+
+| Dataset | Qwen3.5-2B (default) | Qwen3.5-0.8B |
+| --- | --- | --- |
+| E-DAIC | `configs/studies/edaic_transcript_cv.yaml` | `configs/studies/edaic_transcript_cv_0_8b.yaml` |
+| DAIC-WOZ | `configs/studies/daic_woz_transcript_cv.yaml` | `configs/studies/daic_woz_transcript_cv_0_8b.yaml` |
+
+The 0.8B presets pin [Qwen/Qwen3.5-0.8B revision 2fc06364715b967f1860aea9cf38778875588b17](https://huggingface.co/Qwen/Qwen3.5-0.8B/tree/2fc06364715b967f1860aea9cf38778875588b17).
+They retain the same participant input, 32,768-token limit, demonstrations, seed, tasks, and LoRA settings.
+Each preset prepares 20 CV conditions and four optional final conditions for its selected model.
+Point the private preparation config at the selected preset. Use a new bundle destination for each model.
+Changing the checkpoint requires fresh preparation, a tokenizer audit, and host preflight. Do not edit an existing bundle.
+Model names identify schedules, execution groups, W&B tags, metadata, and comparison reports.
+The initial preflight gates remain 2 GiB available system RAM and 8 GiB free GPU memory for both sizes.
+A smaller checkpoint does not bypass these gates. Execution still requires 120% of the measured peak memory.
+
+Standalone 0.8B commands use `configs/examples/qwen35_0_8b/` with `classification_icl.yaml`,
+`classification_lora.yaml`, `score_icl.yaml`, or `score_lora.yaml`. These examples inherit the standalone 4,096-token context limit.
+The legacy matched launcher can select this model through its `matched_study.text_profile` setting.
+Use `configs/examples/qwen35_0_8b/base.yaml` for that setting.
+
 ## Inputs and preparation
 
 Supply authorized transcripts for every participant in the prepared tabular cohort, including development and test participants.
@@ -85,7 +106,7 @@ nohup uv run --no-sync daic-foundation-tab run-transcript-study \
   > /private/classification-launcher.log 2>&1 < /dev/null &
 ```
 
-Outputs reside under `<output_root>/<study_id>/cv/qwen35_2b-<task>/`. `status.json` records the active condition, counts, outputs, and failures. Logs report phases, work units, elapsed time, throughput, and available ETA estimates. Silent phases emit activity every 30 seconds. RAM monitoring continues during model operations.
+Outputs reside under `<output_root>/<study_id>/cv/<model-family>-<task>/`. `status.json` records the active condition, counts, outputs, and failures. Logs report phases, work units, elapsed time, throughput, and available ETA estimates. Silent phases emit activity every 30 seconds. RAM monitoring continues during model operations.
 
 The group stops on failure. Repeat its command to skip verified completed conditions. Interrupted LoRA training resumes from its latest complete checkpoint when input and configuration identities match. Without a complete checkpoint, training restarts explicitly. Incomplete prediction work restarts. A completed run that lacks only its result marker is verified and sealed without repeating inference. The selected adapter remains separate from recovery checkpoints.
 

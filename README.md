@@ -6,7 +6,8 @@ DAIC-WOZ is licensed sensitive data and is not included in this repository. Keep
 
 ## Shared tabular and transcript architecture
 
-The repository also supports Qwen3.5-2B on interview transcripts with frozen ICL or LoRA fine-tuning.
+The repository also supports Qwen3.5-2B and Qwen3.5-0.8B on interview transcripts with frozen ICL or LoRA fine-tuning.
+Choose a model preset in [the transcript campaign guide](docs/transcript-cv-study.md).
 Transcript input is participant-only: DAIC-WOZ filters speaker-labeled turns, while native E-DAIC reads its participant-only `Text` column without added speaker labels.
 Both binary classification and generated PHQ-8 scores use shared participant manifests and existing task metrics.
 The tabular runners retain their current defaults.

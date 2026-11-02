@@ -1,0 +1,3 @@
+extends: base.yaml
+experiment:
+  mode: fine_tuning

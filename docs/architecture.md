@@ -9,7 +9,7 @@ The study compares frozen ICL and fine-tuning on fixed participant cohorts for d
 | Input | Models | Methods | Tasks |
 | --- | --- | --- | --- |
 | Numeric features | TabPFN-3.5, TabICLv2, Kumo Medium | Frozen ICL, native fine-tuning | Classification, regression |
-| Transcript text | Qwen3.5-2B | Frozen ICL, LoRA | Classification, generated PHQ-8 score |
+| Transcript text | Qwen3.5-2B, Qwen3.5-0.8B | Frozen ICL, LoRA | Classification, generated PHQ-8 score |
 
 `models/capabilities.py` declares supported combinations.
 `models/base.py` retains the numeric interfaces.
@@ -113,7 +113,7 @@ Install the optional backend:
 rtk proxy uv sync --extra text --group dev --locked
 ```
 
-The validation examples are under `configs/examples/qwen35_2b/`.
+The validation examples are under `configs/examples/qwen35_2b/` and `configs/examples/qwen35_0_8b/`.
 They cover both tasks and methods. They disable campaigns, bootstrap, and W&B by default.
 Provide the licensed transcripts before inspecting or validating them.
 
