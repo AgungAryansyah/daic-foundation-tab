@@ -85,6 +85,13 @@ def test_registered_factory_does_not_load_weights():
         create_text_model(config)
 
 
+def test_text_config_rejects_dialogue_input():
+    config = text_config()
+    config["data"]["transcripts"]["speaker_policy"] = "dialogue"
+    with pytest.raises(ConfigError, match="participant_only"):
+        validate_config(config)
+
+
 def test_removed_training_subsampling_option_is_rejected():
     config = text_config()
     config["study"] = {"label_budget": 4}

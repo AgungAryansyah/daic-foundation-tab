@@ -41,6 +41,8 @@ class TranscriptDataset:
 def read_transcript(path: Path, settings: dict) -> str:
     if any(part.startswith("._") for part in path.parts):
         raise TranscriptError("Filesystem metadata is not a transcript")
+    if settings.get("speaker_policy", "participant_only") != "participant_only":
+        raise TranscriptError("Transcript input requires speaker_policy=participant_only")
     columns = settings.get("columns", {})
     speaker_column = columns.get("speaker", "speaker")
     text_column = columns.get("text", "value")
@@ -56,9 +58,6 @@ def read_transcript(path: Path, settings: dict) -> str:
         raise TranscriptError(f"Cannot parse transcript {path.name}") from error
     if not {speaker_column, text_column} <= set(frame.columns):
         raise TranscriptError(f"Missing speaker/text columns in {path.name}")
-    policy = settings.get("speaker_policy", "participant_only")
-    if policy not in {"participant_only", "dialogue"}:
-        raise TranscriptError("Unsupported transcript speaker policy")
     participant = {
         str(x).strip().lower() for x in settings.get("participant_speakers", ["Participant"])
     }
@@ -74,10 +73,9 @@ def read_transcript(path: Path, settings: dict) -> str:
         text = " ".join(text.split())
         if speaker not in participant | interviewer:
             raise TranscriptError(f"Unrecognized speaker in {path.name}")
-        if not text or (policy == "participant_only" and speaker not in participant):
+        if not text or speaker not in participant:
             continue
-        label = "Participant" if speaker in participant else "Interviewer"
-        utterances.append(f"{label}: {text}" if policy == "dialogue" else text)
+        utterances.append(text)
     if not utterances:
         raise TranscriptError(f"Empty selected transcript in {path.name}")
     return "\n".join(utterances)
@@ -89,6 +87,8 @@ def load_transcripts(
     manifest_path = config["experiment"].get("partition_manifest")
     manifest = load_manifest(manifest_path, config) if manifest_path else prepare_manifest(config)
     settings = config["data"]["transcripts"]
+    if settings.get("speaker_policy", "participant_only") != "participant_only":
+        raise TranscriptError("Transcript input requires speaker_policy=participant_only")
     root = Path(config["data"]["root"]).expanduser().resolve()
     selected = manifest["participants"]
     cache_root = Path(config["project"]["cache_root"]).expanduser() / "transcripts"
@@ -105,7 +105,7 @@ def load_transcripts(
                 f"Expected exactly one transcript for participant {participant_id}"
             )
         digest = hashlib.sha256(matches[0].read_bytes()).hexdigest()
-        key = fingerprint({"version": 1, "source": digest, "settings": settings})
+        key = fingerprint({"version": 2, "source": digest, "settings": settings})
         cache = cache_root / f"{key}.json"
         if cache.is_file():
             text = json.loads(cache.read_text(encoding="utf-8"))["text"]

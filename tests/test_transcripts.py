@@ -19,7 +19,7 @@ def transcript_config(tmp_path):
     return config
 
 
-def test_speaker_policies_preserve_order_and_do_not_include_identifiers(tmp_path):
+def test_participant_speech_preserves_order_and_does_not_include_identifiers(tmp_path):
     config = transcript_config(tmp_path)
     dataset = load_transcripts(config)
     example = dataset.examples("fit", labeled=True)[0]
@@ -29,11 +29,15 @@ def test_speaker_policies_preserve_order_and_do_not_include_identifiers(tmp_path
     with pytest.raises(TranscriptError, match="Test labels"):
         dataset.examples("test", labeled=True)
     config["data"]["transcripts"]["speaker_policy"] = "dialogue"
-    dialogue = load_transcripts(config)
-    assert dialogue.texts[example.participant_id].startswith(
-        "Interviewer: How are you?\nParticipant:"
-    )
-    assert dialogue.cache_key != dataset.cache_key
+    with pytest.raises(TranscriptError, match="participant_only"):
+        load_transcripts(config)
+
+
+def test_reader_rejects_dialogue_input(tmp_path):
+    path = tmp_path / "transcript.tsv"
+    path.write_text("speaker\tvalue\nEllie\tQuestion\nParticipant\tAnswer\n")
+    with pytest.raises(TranscriptError, match="participant_only"):
+        read_transcript(path, {"speaker_policy": "dialogue"})
 
 
 def test_source_changes_invalidate_cleaned_cache(tmp_path):

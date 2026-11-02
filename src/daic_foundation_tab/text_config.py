@@ -31,8 +31,8 @@ def validate_text_config(config: Mapping) -> None:
     transcript = config["data"].get("transcripts", {})
     require(bool(transcript.get("pattern")), "data.transcripts.pattern is required")
     require(
-        transcript.get("speaker_policy", "participant_only") in {"participant_only", "dialogue"},
-        "speaker_policy must be participant_only or dialogue",
+        transcript.get("speaker_policy", "participant_only") == "participant_only",
+        "Transcript input requires speaker_policy=participant_only",
     )
     require(config["runtime"].get("require_cuda") is True, "Text runs require CUDA")
     require(config["runtime"].get("device") == "cuda:0", "runtime.device must be cuda:0")
