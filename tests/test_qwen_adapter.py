@@ -203,3 +203,38 @@ def test_resume_preserves_accumulation_with_a_partial_final_group(tmp_path):
     assert [item.probability_positive for item in resumed.predict(validation)] == pytest.approx(
         [item.probability_positive for item in complete.predict(validation)]
     )
+
+
+@pytest.mark.parametrize("task,target", [("classification", 1), ("regression", 12.5)])
+def test_answer_suffix_loss_matches_full_loss_and_gradients_without_shortening_input(tmp_path, task, target):
+    import torch
+
+    adapter = tiny_adapter(tmp_path, mode="fine_tuning", task=task)
+    adapter.prepare([])
+    adapter.model.requires_grad_(True)
+    record = adapter.encoder.training_record(TextExample("fit", "I feel tired " * 20, target))
+    batch = {key: adapter._tensor(value) for key, value in record.items()}
+    full_loss = adapter.model(**batch, use_cache=False).loss
+    full_loss.backward()
+    original = {name: parameter.grad.clone() for name, parameter in adapter.model.named_parameters()
+                if parameter.grad is not None}
+    adapter.model.zero_grad(set_to_none=True)
+    projected, input_lengths = [], []
+    projection_hook = adapter.model.lm_head.register_forward_pre_hook(
+        lambda module, args: projected.append(args[0].shape[1]))
+    input_hook = adapter.model.model.register_forward_pre_hook(
+        lambda module, args, kwargs: input_lengths.append(kwargs["input_ids"].shape[1]),
+        with_kwargs=True)
+    try:
+        reduced_loss = adapter._training_loss(record)
+        reduced_loss.backward()
+    finally:
+        projection_hook.remove()
+        input_hook.remove()
+    torch.testing.assert_close(reduced_loss, full_loss)
+    for name, parameter in adapter.model.named_parameters():
+        if name in original:
+            torch.testing.assert_close(parameter.grad, original[name], atol=1e-6, rtol=1e-4)
+    assert input_lengths == [len(record["input_ids"])]
+    assert projected == [sum(label != -100 for label in record["labels"]) + 1]
+    assert projected[0] < input_lengths[0]

@@ -154,6 +154,14 @@ class QwenTextModel:
                     results.append(TextPrediction(parse_score(answer), None, answer, len(prompt)))
         return results
 
+    def _training_loss(self, record):
+        answer_tokens = sum(label != -100 for label in record["labels"])
+        logits_to_keep = answer_tokens + 1
+        batch = {key: self._tensor(value) for key, value in record.items()}
+        # The final prompt position predicts the first answer token.
+        batch["labels"] = batch["labels"][:, -logits_to_keep:]
+        return self.model(**batch, use_cache=False, logits_to_keep=logits_to_keep).loss
+
     def _validation_metric(self, validation):
         predictions = self.predict([replace(example, target=None) for example in validation])
         target = [item.target for item in validation]
@@ -283,10 +291,9 @@ class QwenTextModel:
             losses = []
             for position in range(offset, len(order)):
                 record = records[order[position]]
-                batch = {key: self._tensor(value) for key, value in record.items()}
                 group_start = (position // accumulation) * accumulation
                 group_size = min(accumulation, len(order) - group_start)
-                loss = self.model(**batch, use_cache=False).loss
+                loss = self._training_loss(record)
                 if not torch.isfinite(loss):
                     raise ValueError("Non-finite adapter training loss")
                 losses.append(float(loss.detach()))
