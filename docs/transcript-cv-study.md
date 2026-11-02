@@ -6,7 +6,35 @@ Use `configs/studies/edaic_transcript_cv.yaml` or `configs/studies/daic_woz_tran
 
 ## Inputs and preparation
 
-Supply authorized transcripts for every participant in the prepared tabular cohort, including development and test participants. The default pattern is `data/{participant_id}_TRANSCRIPT.csv`, relative to `data.root`. The parser expects tab-separated `speaker` and `value` columns. Set the root, pattern, delimiter, encoding, or column names in a local configuration that extends the dataset preset. E-DAIC numeric feature availability does not establish transcript availability. The implementation does not create transcripts from recordings.
+Supply authorized transcripts for every participant in the prepared tabular cohort, including development and test participants.
+All transcript commands use participant speech only. The `dialogue` policy is rejected.
+The source format determines how the reader obtains participant speech:
+
+| Preset | `data.transcripts.format` | Path relative to `data.root` | Reading rule |
+| --- | --- | --- | --- |
+| DAIC-WOZ | `daic_woz` | `data/{participant_id}_TRANSCRIPT.csv` | Read tab-separated `speaker` and `value`. Keep participant turns and reject unknown speakers. |
+| E-DAIC | `edaic` | `data/{participant_id}_P/{participant_id}_Transcript.csv` | Read comma-separated `Text`. The official source already contains participant speech only. |
+
+E-DAIC does not require a speaker column or added speaker labels.
+Declare `format: edaic` explicitly for native E-DAIC files. A missing speaker column does not trigger automatic format detection.
+Both formats preserve source row order, normalize whitespace, and join nonempty participant utterances with newlines.
+E-DAIC timestamps and `Confidence` values are not model inputs and do not filter utterances.
+The reader rejects missing text columns, empty text, duplicate sources, and missing participants.
+It does not generate new transcripts or change the downloaded files.
+
+Set `data.root` to the original transcript download directory.
+For E-DAIC, this is the directory containing `data/<id>_P/`, which can differ from the prepared tabular feature directory.
+Create a local configuration outside version control, for example `/private/edaic-text.yaml`:
+
+```yaml
+extends: /path/to/daic-foundation-tab/configs/studies/edaic_transcript_cv.yaml
+data:
+  root: /private/edaic-source
+```
+
+Set a different transcript pattern only if your downloaded files have a different layout.
+The resolved configuration and source hashes identify the selected format and original contents.
+After changing the reader or format settings, prepare a new transcript bundle and repeat its audit and host preflight.
 
 Preparation imports exact participants, labels, task-specific folds, internal selection groups, and final assignments from the tabular bundle. It never regenerates folds or excludes participants with missing transcripts. Frozen ICL selects two demonstrations with the existing seeded selector from each fit pool. Selection is fixed for each task, fold, and seed. This selector does not balance classes. LoRA uses the complete fit pool and the imported selection pool. Outer evaluation participants enter neither pool.
 
@@ -17,7 +45,7 @@ These commands run on the remote GPU host. Use native commands there, without RT
 ```bash
 uv sync --extra text --group dev --locked
 uv run --no-sync daic-foundation-tab prepare-transcript-study \
-  --config configs/studies/edaic_transcript_cv.yaml \
+  --config /private/edaic-text.yaml \
   --tabular-study /private/edaic-tabular-study \
   --output /private/edaic-transcript-study
 ```

@@ -48,13 +48,15 @@ Run records distinguish the fit pool, selection pool, and actual Qwen demonstrat
 
 ## Transcript and output contracts
 
-Transcript settings define the file pattern, delimiter, encoding, column mapping, and speaker names.
-The default reader expects tab-separated files with `speaker` and `value` columns.
-It ignores hidden filesystem files and rejects duplicate sources, unknown speakers, and empty selected text.
-It preserves source row order.
-
-`participant_only` retains participant speech.
-`dialogue` retains both speakers with normalized speaker labels.
+Transcript settings define the source format, file pattern, delimiter, encoding, and column mapping.
+Every transcript path requires `participant_only`; `dialogue` is rejected.
+The default `daic_woz` format reads tab-separated `speaker` and `value` columns and retains participant turns.
+It rejects unknown speaker labels.
+The explicit `edaic` format reads comma-separated `Text` from the official participant-only source without a speaker column.
+The E-DAIC campaign preset uses `data/<id>_P/<id>_Transcript.csv` relative to the original source root.
+The reader does not infer participant-only provenance from a missing speaker column.
+Both formats ignore hidden filesystem files and reject duplicate sources and empty selected text.
+They preserve source row order and normalize whitespace without confidence-based filtering.
 Participant identifiers and query labels stay outside prompts.
 Cleaned text and tokenized prompts use separate caches.
 Content changes, preprocessing changes, and checkpoint revisions invalidate the relevant cache.
