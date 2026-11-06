@@ -58,6 +58,8 @@ def test_rejects_incompatible_configuration(section, key, value):
         ("max_length", True),
         ("demonstrations", -1),
         ("learning_rate", float("nan")),
+        ("adapter_method", "qlora"),
+        ("adapter_method", "dora"),
     ],
 )
 def test_rejects_invalid_execution_settings(key, value):
@@ -65,6 +67,13 @@ def test_rejects_invalid_execution_settings(key, value):
     config["model"]["parameters"][key] = value
     with pytest.raises(ConfigError):
         validate_config(config)
+
+
+def test_dora_is_valid_in_fine_tuning_mode():
+    config = text_config()
+    config["experiment"]["mode"] = "fine_tuning"
+    config["model"]["parameters"]["adapter_method"] = "dora"
+    validate_config(config)
 
 
 def test_all_text_examples_validate_without_loading_models():

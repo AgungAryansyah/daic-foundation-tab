@@ -48,6 +48,9 @@ def validate_text_config(config: Mapping) -> None:
     require(config["runtime"].get("device") == "cuda:0", "runtime.device must be cuda:0")
     parameters = config["model"].get("parameters", {})
     require(isinstance(parameters, Mapping), "model.parameters must be a mapping")
+    adapter_method = parameters.get("adapter_method", "lora")
+    require(adapter_method in ("lora", "dora"), "model.parameters.adapter_method must be lora or dora")
+    require(mode == "fine_tuning" or adapter_method == "lora", "DoRA requires fine_tuning mode")
     require(parameters.get("dtype", "bfloat16") == "bfloat16", "Text profiles require bfloat16")
     require(
         not parameters.get("quantization"), "Quantization is not supported by the initial profile"
@@ -94,7 +97,7 @@ def validate_text_config(config: Mapping) -> None:
         isinstance(shots, int) and not isinstance(shots, bool) and shots >= 0,
         "demonstrations must be a nonnegative integer",
     )
-    require(mode != "fine_tuning" or shots == 0, "LoRA profiles use zero demonstrations")
+    require(mode != "fine_tuning" or shots == 0, "Fine-tuning profiles use zero demonstrations")
     evaluation = config["evaluation"]
     threshold = evaluation.get("threshold")
     require(

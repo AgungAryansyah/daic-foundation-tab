@@ -8,7 +8,8 @@ from tests.test_text_config import text_config
 from tests.test_text_prompt import TinyTokenizer
 
 
-def tiny_adapter(tmp_path, *, mode="frozen_icl", task="classification", device="cpu", family="qwen35_2b"):
+def tiny_adapter(tmp_path, *, mode="frozen_icl", task="classification", device="cpu", family="qwen35_2b",
+                 adapter_method=None):
     torch = pytest.importorskip("torch")
     pytest.importorskip("peft")
     transformers = pytest.importorskip("transformers")
@@ -39,6 +40,8 @@ def tiny_adapter(tmp_path, *, mode="frozen_icl", task="classification", device="
     config["experiment"].update(task=task, mode=mode)
     config["evaluation"]["threshold"] = 0.5 if task == "classification" else None
     config["model"]["parameters"].update(checkpoint_steps=1, learning_rate=0.01)
+    if adapter_method is not None:
+        config["model"]["parameters"]["adapter_method"] = adapter_method
     return QwenTextModel(config, model=model, tokenizer=TinyTokenizer(), revision="tiny-fixture-v1")
 
 
@@ -136,6 +139,60 @@ def test_resume_checks_identity_and_continues_optimizer_steps(tmp_path):
     resumed = tiny_adapter(tmp_path, mode="fine_tuning")
     resumed.fit(examples(), validation, directory, resume=True)
     assert resumed.optimizer_steps == 2
+
+
+def test_dora_resume_updates_magnitude_and_rejects_mismatched_adapter(tmp_path, monkeypatch):
+    import peft
+    import torch
+
+    adapter = tiny_adapter(tmp_path, mode="fine_tuning", adapter_method="dora")
+    original = [(parameter, parameter.detach().clone()) for parameter in adapter.model.parameters()]
+    validation = [TextExample("dev0", "Tired", 0), TextExample("dev1", "Well", 1)]
+    directory = tmp_path / "checkpoints"
+    initial = {}
+    wrap = peft.get_peft_model
+
+    def capture(model, config):
+        wrapped = wrap(model, config)
+        initial.update({
+            name: parameter.detach().clone()
+            for name, parameter in wrapped.named_parameters()
+            if "lora_magnitude_vector" in name
+        })
+        return wrapped
+
+    def interrupt(completed, total):
+        if completed == 1:
+            raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(peft, "get_peft_model", capture)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        adapter.fit(examples(), validation, directory, progress=interrupt)
+    assert initial and any(
+        not torch.equal(parameter, initial[name])
+        for name, parameter in adapter.model.named_parameters()
+        if name in initial
+    )
+    assert all(torch.equal(parameter, before) for parameter, before in original)
+
+    resumed = tiny_adapter(tmp_path, mode="fine_tuning", adapter_method="dora")
+    latest = json.loads((directory / "latest.json").read_text())["checkpoint"]
+    config_path = directory / latest / "adapter/adapter_config.json"
+    config_text = config_path.read_text()
+    config_path.write_text(json.dumps({**json.loads(config_text), "use_dora": False}))
+    with pytest.raises(ValueError, match="adapter method"):
+        resumed.fit(examples(), validation, directory, resume=True)
+    config_path.write_text(config_text)
+    resumed.fit(examples(), validation, directory, resume=True)
+    assert resumed.run_metadata()["adaptation"] == "dora"
+    assert resumed.optimizer_steps == 2
+
+    lora = tiny_adapter(tmp_path, mode="fine_tuning")
+    with pytest.raises(ValueError, match="adapter method"):
+        lora.load_adapter(directory / "best_adapter")
+    restored = tiny_adapter(tmp_path, mode="fine_tuning", adapter_method="dora")
+    restored.load_adapter(directory / "best_adapter")
+    assert restored.predict(validation) == resumed.predict(validation)
 
 
 def test_regression_uses_numeric_generation_and_rejects_invalid_output(tmp_path, monkeypatch):

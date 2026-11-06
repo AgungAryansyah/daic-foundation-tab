@@ -25,12 +25,18 @@ def load_text_tokenizer(model_config: dict):
     )
 
 
+def require_adapter_method(config_path: Path, method: str) -> None:
+    if json.loads(config_path.read_text()).get("use_dora", False) is not (method == "dora"):
+        raise ValueError("Checkpoint adapter method differs from the configured method")
+
+
 class QwenTextModel:
     def __init__(self, config: dict, *, model=None, tokenizer=None, revision: str | None = None):
         self.config = config
         self.parameters = config["model"]["parameters"]
         self.task = config["experiment"]["task"]
         self.mode = config["experiment"].get("mode", "fine_tuning")
+        self.adapter_method = self.parameters.get("adapter_method", "lora")
         self.model = model
         self.tokenizer = tokenizer
         self.revision = revision
@@ -78,7 +84,7 @@ class QwenTextModel:
         if self.encoder is None:
             self._load()
         if self.mode == "fine_tuning" and demonstrations:
-            raise ValueError("LoRA fine-tuning does not use demonstrations")
+            raise ValueError("Fine-tuning does not use demonstrations")
         self.encoder.demonstrations = list(demonstrations)
 
     def preflight(self, examples: Sequence[TextExample]) -> None:
@@ -209,6 +215,7 @@ class QwenTextModel:
             state = torch.load(latest / "training.pt", map_location="cpu", weights_only=True)
             if state["identity"] != identity:
                 raise ValueError("Training resume identity mismatch")
+            require_adapter_method(latest / "adapter/adapter_config.json", self.adapter_method)
             self.model = PeftModel.from_pretrained(
                 self.model, latest / "adapter", is_trainable=True
             )
@@ -227,6 +234,7 @@ class QwenTextModel:
                     lora_dropout=0.0,
                     target_modules="all-linear",
                     bias="none",
+                    use_dora=self.adapter_method == "dora",
                 ),
             )
         trainable = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
@@ -236,7 +244,7 @@ class QwenTextModel:
             parameter.requires_grad and "lora_" not in name
             for name, parameter in self.model.named_parameters()
         ):
-            raise RuntimeError("Only LoRA adapter parameters may be trainable")
+            raise RuntimeError("Only adapter parameters may be trainable")
         optimizer = torch.optim.AdamW(trainable, lr=self.parameters.get("learning_rate", 0.0002))
         if state is not None:
             optimizer.load_state_dict(state["optimizer"])
@@ -330,11 +338,11 @@ class QwenTextModel:
                     "best_validation_metric": self.best_metric,
                 })
             offset = 0
-        if not (directory / "best_adapter" / "adapter_config.json").is_file():
+        selected = directory / "best_adapter"
+        if not (selected / "adapter_config.json").is_file():
             raise ValueError("The selected adapter checkpoint is missing")
-        self.model.load_adapter(
-            directory / "best_adapter", adapter_name="selected", is_trainable=False
-        )
+        require_adapter_method(selected / "adapter_config.json", self.adapter_method)
+        self.model.load_adapter(selected, adapter_name="selected", is_trainable=False)
         self.model.set_adapter("selected")
         self.model.requires_grad_(False)
         self.model.eval()
@@ -343,6 +351,7 @@ class QwenTextModel:
     def load_adapter(self, path: Path) -> None:
         from peft import PeftModel
 
+        require_adapter_method(path / "adapter_config.json", self.adapter_method)
         if self.encoder is None:
             self.prepare([])
         self.model = PeftModel.from_pretrained(self.model, path, is_trainable=False)
@@ -354,7 +363,7 @@ class QwenTextModel:
             "model_name": self.config["model"]["name"],
             "model_id": self.config["model"]["model_id"],
             "checkpoint_revision": self.revision,
-            "adaptation": "lora" if self.mode == "fine_tuning" else "frozen_icl",
+            "adaptation": self.adapter_method if self.mode == "fine_tuning" else "frozen_icl",
             "optimizer_steps": self.optimizer_steps,
             "gradient_checkpointing": bool(self.parameters.get("gradient_checkpointing", False)),
             "best_validation_metric": self.best_metric,

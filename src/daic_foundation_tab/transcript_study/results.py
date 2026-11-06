@@ -8,6 +8,7 @@ import pandas as pd
 import yaml
 
 from daic_foundation_tab.data.participants import fingerprint
+from daic_foundation_tab.models.qwen import require_adapter_method
 from daic_foundation_tab.tabular_study.bundle import _json, file_hash
 from daic_foundation_tab.tabular_study.collection import _metrics, _scalars
 
@@ -84,10 +85,14 @@ def verify_result(context: tuple, output: str | Path, *, require_checkpoint: boo
     metadata = json.loads((output / "model_metadata.json").read_text())
     if metadata["checkpoint_revision"] != expected["model"]["revision"] or metadata["model_id"] != expected["model"]["model_id"]:
         raise ValueError("Transcript model checkpoint revision differs")
+    method = expected["model"]["parameters"].get("adapter_method", "lora")
     if (metadata.get("base_parameters_frozen") is not True
-            or metadata.get("adaptation") != ("lora" if condition["mode"] == "fine_tuning" else "frozen_icl")
+            or metadata.get("adaptation") != (method if condition["mode"] == "fine_tuning" else "frozen_icl")
             or (metadata.get("optimizer_steps", 0) > 0) != (condition["mode"] == "fine_tuning")):
         raise ValueError("Transcript adaptation metadata contradicts the executed method")
+    adapter_config = output / "checkpoints/best_adapter/adapter_config.json"
+    if checkpoints and adapter_config.is_file():
+        require_adapter_method(adapter_config, method)
     tracking = json.loads((output / "wandb_run.json").read_text())
     if config["tracking"]["wandb"]["enabled"] and (
         tracking.get("status") != "completed" or not tracking.get("run_id")
