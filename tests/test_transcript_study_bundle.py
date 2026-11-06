@@ -8,6 +8,7 @@ import yaml
 
 from daic_foundation_tab.tabular_study.bundle import prepare_bundle as prepare_tabular
 from daic_foundation_tab.transcript_study.bundle import (
+    condition_config,
     dataset_for,
     prepare_bundle,
     read_bundle,
@@ -78,6 +79,25 @@ def test_transcript_cohort_and_folds_are_exact_and_portable(tmp_path, dataset_id
     assert original == {p.name: p.read_bytes() for p in parent.iterdir() if p.is_file()}
     again = prepare_bundle(config, parent, tmp_path / "again", tokenizer=TinyTokenizer())
     assert read_bundle(again)[0] == study
+
+
+def test_dora_only_bundle_audits_only_fine_tuning(tmp_path):
+    config, parent, _ = transcript_input(tmp_path)
+    settings = yaml.safe_load(config.read_text())
+    settings["transcript_study"]["methods"] = ["fine_tuning"]
+    settings["model"] = {"parameters": {"adapter_method": "dora"}}
+    config.write_text(yaml.safe_dump(settings))
+    bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
+    study = read_bundle(bundle)[0]
+    conditions = study["conditions"]["cv"]
+    assert len(conditions) == 10
+    assert {c["mode"] for c in conditions} == {"fine_tuning"}
+    assert len(study["conditions"]["final"]) == 2
+    audit = json.loads((bundle / "audit.json").read_text())["conditions"]
+    assert all(not audit[c["condition_id"]]["demonstrations"] for c in conditions)
+    assert "adapter_method" not in condition_config(
+        study["configuration"], "classification", "frozen_icl", 42
+    )["model"]["parameters"]
 
 
 @pytest.mark.parametrize("problem", ["missing", "duplicate", "empty"])

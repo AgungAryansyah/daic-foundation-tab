@@ -23,7 +23,7 @@ from daic_foundation_tab.tracking.runtime import (
 from daic_foundation_tab.tracking.seeds import set_global_seed
 
 from .audit import require_audit
-from .bundle import MODES, TASKS, dataset_for, read_bundle
+from .bundle import TASKS, dataset_for, read_bundle
 from .condition import execution_config
 from .resources import (
     configure_threads,
@@ -65,8 +65,11 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
 
     study = context[0]
     peaks = {"peak_process_ram_mb": 0.0, "peak_cuda_reserved_mb": 0.0, "peak_cuda_allocated_mb": 0.0}
-    for completed, mode in enumerate(MODES, 1):
-        candidates = [c for c in study["conditions"][stage] if c["task"] == task and c["mode"] == mode]
+    by_mode = {}
+    for condition in study["conditions"][stage]:
+        if condition["task"] == task:
+            by_mode.setdefault(condition["mode"], []).append(condition)
+    for completed, (mode, candidates) in enumerate(by_mode.items(), 1):
         relevant_role = "fit" if mode == "fine_tuning" else ("evaluation" if stage == "cv" else "dev")
         condition = max(candidates, key=lambda c: max(row["total_tokens"] for row in audit["conditions"][c["condition_id"]]["records"]
                                                      if row["role"] == relevant_role))
@@ -110,7 +113,8 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
         del model
         gc.collect()
         torch.cuda.empty_cache()
-        logger.info("phase=preflight progress=%d/2 methods (%.1f%%)", completed, completed * 50)
+        logger.info("phase=preflight progress=%d/%d methods (%.1f%%)",
+                    completed, len(by_mode), completed * 100 / len(by_mode))
     return peaks
 
 

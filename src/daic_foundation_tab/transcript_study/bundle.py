@@ -32,9 +32,10 @@ def condition_config(config: dict, task: str, mode: str, seed: int) -> dict:
     config["project"]["seed"] = seed
     config["experiment"].update(task=task, mode=mode)
     config["evaluation"]["threshold"] = 0.5 if task == "classification" else None
-    config["model"]["parameters"]["demonstrations"] = (
-        config["transcript_study"]["demonstrations"] if mode == "frozen_icl" else 0
-    )
+    parameters = config["model"]["parameters"]
+    parameters["demonstrations"] = config["transcript_study"]["demonstrations"] if mode == "frozen_icl" else 0
+    if mode == "frozen_icl":
+        parameters.pop("adapter_method", None)
     return config
 
 
@@ -51,6 +52,12 @@ def load_settings(path: str | Path) -> dict:
         raise ValueError("Transcript model_seeds must contain unique nonnegative integers")
     if settings.get("demonstrations") != 2:
         raise ValueError("The initial transcript study requires two demonstrations")
+    methods = settings.get("methods", list(MODES))
+    if (not isinstance(methods, list) or not methods or any(mode not in MODES for mode in methods)
+            or len(methods) != len(set(methods))):
+        raise ValueError("Transcript methods must contain unique values from frozen_icl and fine_tuning")
+    if config["model"]["parameters"].get("adapter_method") == "dora" and "fine_tuning" not in methods:
+        raise ValueError("DoRA requires a fine_tuning condition")
     for key in ("bootstrap_iterations", "bootstrap_seed"):
         value = settings.get(key)
         if isinstance(value, bool) or not isinstance(value, int) or value < (1 if key.endswith("iterations") else 0):
@@ -60,7 +67,7 @@ def load_settings(path: str | Path) -> dict:
     revision = config["model"].get("revision", "")
     if not isinstance(revision, str) or len(revision) != 40 or any(x not in "0123456789abcdef" for x in revision):
         raise ValueError("Transcript campaigns require an immutable checkpoint revision")
-    for task, mode in product(TASKS, MODES):
+    for task, mode in product(TASKS, methods):
         validate_config(condition_config(config, task, mode, seeds[0]))
     return config
 
@@ -76,9 +83,10 @@ def _logical(config: dict) -> dict:
 
 def _schedule(study_id: str, config: dict, folds: dict) -> dict:
     result = {}
+    settings = config["transcript_study"]
     for stage in ("cv", "final"):
         conditions = []
-        for task, mode, seed in product(TASKS, MODES, config["transcript_study"]["model_seeds"]):
+        for task, mode, seed in product(TASKS, settings.get("methods", MODES), settings["model_seeds"]):
             for fold in folds[task]["folds"] if stage == "cv" else [None]:
                 condition = {"stage": stage, "family": config["model"]["name"], "modality": "transcript", "task": task,
                                  "mode": mode, "model_seed": seed, "fold": fold["fold"] if fold else None}
