@@ -60,20 +60,28 @@ def _longest(dataset, audit: dict, role: str, *, labeled: bool = False):
     return max(dataset.examples(role, labeled=labeled), key=lambda example: lengths[example.participant_id])
 
 
+def _longest_condition(candidates, details, role):
+    return max(candidates, key=lambda condition: max(
+        row["total_tokens"] for row in details[condition["condition_id"]]["records"]
+        if row["role"] == role
+    ))
+
+
 def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logger) -> dict:
     import torch
 
     study = context[0]
+    details = audit["conditions"]
+    evaluation_roles = ("evaluation",) if stage == "cv" else ("dev", "test")
     peaks = {"peak_process_ram_mb": 0.0, "peak_cuda_reserved_mb": 0.0, "peak_cuda_allocated_mb": 0.0}
     by_mode = {}
     for condition in study["conditions"][stage]:
         if condition["task"] == task:
             by_mode.setdefault(condition["mode"], []).append(condition)
     for completed, (mode, candidates) in enumerate(by_mode.items(), 1):
-        relevant_role = "fit" if mode == "fine_tuning" else ("evaluation" if stage == "cv" else "dev")
-        condition = max(candidates, key=lambda c: max(row["total_tokens"] for row in audit["conditions"][c["condition_id"]]["records"]
-                                                     if row["role"] == relevant_role))
-        detail = audit["conditions"][condition["condition_id"]]
+        relevant_role = "fit" if mode == "fine_tuning" else evaluation_roles[0]
+        condition = _longest_condition(candidates, details, relevant_role)
+        detail = details[condition["condition_id"]]
         dataset = dataset_for(context, condition)
         config = execution_config(study, condition, host)
         config["tracking"]["wandb"].update(enabled=False, mode="disabled")
@@ -100,8 +108,16 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
                 with tempfile.TemporaryDirectory(prefix="transcript-probe-", dir=host["output_root"]) as temporary:
                     model.fit(training, validation, Path(temporary),
                               progress=lambda n, total: logger.info("phase=probe training optimizer_steps=%d/%d", n, total))
-            for role in (("evaluation",) if stage == "cv" else ("dev", "test")):
-                query = _longest(dataset, detail, role)
+            for role in evaluation_roles:
+                evaluation = _longest_condition(candidates, details, role)
+                evaluation_data = dataset_for(context, evaluation)
+                if evaluation != condition and mode == "frozen_icl":
+                    model.prepare(select_demonstrations(
+                        evaluation_data.examples("fit", labeled=True),
+                        config["model"]["parameters"]["demonstrations"],
+                        evaluation["model_seed"],
+                    ))
+                query = _longest(evaluation_data, details[evaluation["condition_id"]], role)
                 model.preflight([query])
                 prediction = model.predict([replace(query, target=None)])
                 if len(prediction) != 1 or not math.isfinite(prediction[0].value):
@@ -132,6 +148,7 @@ def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str) -> Pa
     status_path = directory / f"{task}-{stage}.status.json"
     _json(status_path, {"status": "running", "task": task, "stage": stage})
     destination = None
+    measured = {}
     try:
         require_cuda_device("cuda:0")
         identity = profile_identity(study, audit, host, task, stage)
@@ -140,6 +157,9 @@ def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str) -> Pa
         require_capacity({"peak_process_ram_mb": 2048 / 1.2, "peak_cuda_reserved_mb": 8192 / 1.2})
         with phase(logger, "full-checkpoint transcript preflight"):
             measured = _probe(context, audit, host, task, stage, logger)
+        logger.info("phase=preflight peak_ram=%.1fMiB peak_gpu_reserved=%.1fMiB",
+                    measured["peak_process_ram_mb"], measured["peak_cuda_reserved_mb"])
+        require_capacity(measured)
         profile = {"version": 1, "status": "passed", "identity": identity, **measured,
                    "memory": memory_snapshot()}
         profile["profile_id"] = fingerprint(profile)
@@ -149,7 +169,7 @@ def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str) -> Pa
     except BaseException as error:
         if destination is not None:
             _json(destination, {"version": 1, "status": "failed", "identity": identity,
-                                "error_type": type(error).__name__})
+                                "error_type": type(error).__name__, **measured})
         _json(status_path, {"status": "failed", "error_type": type(error).__name__, "error": str(error)})
         raise
 

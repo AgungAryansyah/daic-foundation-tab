@@ -87,6 +87,13 @@ def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_
     host = {"output_root": str(tmp_path / "runs"), "host_label": "test", "wandb": {"mode": "disabled"}}
     (tmp_path / "runs").mkdir()
     calls = []
+    longest_evaluation = next(
+        c for c in reversed(context[0]["conditions"]["cv"])
+        if c["task"] == "classification" and c["mode"] == "fine_tuning"
+    )
+    evaluation = next(row for row in audit["conditions"][longest_evaluation["condition_id"]]["records"]
+                      if row["role"] == "evaluation")
+    evaluation["total_tokens"] += 1000
 
     class Model:
         def __init__(self, config):
@@ -109,6 +116,8 @@ def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_
 
         def predict(self, examples):
             assert all(x.target is None for x in examples)
+            if self.config["experiment"]["mode"] == "fine_tuning":
+                assert examples[0].participant_id == evaluation["participant_id"]
             return [TextPrediction(1, .75, "1", 100)]
 
     @contextmanager
@@ -148,3 +157,20 @@ def test_failed_repeat_probe_invalidates_a_previous_success(tmp_path, monkeypatc
     assert json.loads(output.read_text())["status"] == "failed"
     with pytest.raises(ValueError, match="failed, changed"):
         preflight.require_preflight(bundle, context, host, "classification", "cv")
+
+
+def test_measured_memory_margin_must_pass_before_approving_preflight(tmp_path, monkeypatch):
+    from tests.test_transcript_study_groups import host_input
+
+    mock_hardware(monkeypatch)
+    bundle, host_path = prepared_input(tmp_path), host_input(tmp_path)
+    monkeypatch.setattr(preflight, "require_cuda_device", lambda device: device)
+    peaks = {"peak_process_ram_mb": 1024, "peak_cuda_reserved_mb": 60 * 1024}
+    monkeypatch.setattr(preflight, "_probe", lambda *args: peaks)
+    with pytest.raises(RuntimeError, match="Insufficient free GPU memory"):
+        preflight.preflight_worker(bundle, host_path, "classification", "cv")
+    context, host = read_bundle(bundle), resources.load_host(host_path)
+    identity = resources.profile_identity(context[0], require_audit(bundle, context[0]), host, "classification", "cv")
+    profile = json.loads(resources.profile_path(host, identity).read_text())
+    assert profile["status"] == "failed"
+    assert profile["peak_cuda_reserved_mb"] == peaks["peak_cuda_reserved_mb"]
