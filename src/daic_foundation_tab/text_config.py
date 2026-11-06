@@ -29,6 +29,7 @@ def validate_text_config(config: Mapping) -> None:
     expected_model = {
         "qwen35_2b": "Qwen/Qwen3.5-2B",
         "qwen35_0_8b": "Qwen/Qwen3.5-0.8B",
+        "qwen35_9b": "Qwen/Qwen3.5-9B",
     }[capability.family]
     require(config["model"].get("model_id") == expected_model, f"Use {expected_model}")
     require(bool(config["data"].get("dataset_id")), "data.dataset_id is required")

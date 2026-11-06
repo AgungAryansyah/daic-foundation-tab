@@ -19,6 +19,7 @@ MODEL_FAMILIES = {
         ("kumo_medium", "tabular"),
         ("qwen35_2b", "transcript"),
         ("qwen35_0_8b", "transcript"),
+        ("qwen35_9b", "transcript"),
     )
 }
 

@@ -14,6 +14,7 @@ from .text_base import TextModel
 TEXT_MODEL_FACTORIES = {
     "qwen35_2b": ("daic_foundation_tab.models.qwen", "QwenTextModel"),
     "qwen35_0_8b": ("daic_foundation_tab.models.qwen", "QwenTextModel"),
+    "qwen35_9b": ("daic_foundation_tab.models.qwen", "QwenTextModel"),
 }
 
 

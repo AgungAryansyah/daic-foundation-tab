@@ -3,6 +3,7 @@ import yaml
 
 from daic_foundation_tab.config import load_config
 from daic_foundation_tab.matched_study import condition_configs
+from daic_foundation_tab.models.registry import create_text_model
 from tests.test_matched_study import ROOT, study_config
 
 
@@ -37,3 +38,22 @@ def test_smaller_standalone_examples_validate(name):
     config = load_config(ROOT / f"configs/examples/qwen35_0_8b/{name}.yaml")
     assert config["model"]["name"] == "qwen35_0_8b"
     assert config["model"]["model_id"] == "Qwen/Qwen3.5-0.8B"
+
+
+@pytest.mark.parametrize("dataset_id", ["edaic", "daic_woz"])
+@pytest.mark.parametrize("size", ["0_8b", "2b", "9b"])
+def test_dora_campaign_presets(dataset_id, size):
+    from daic_foundation_tab.transcript_study.bundle import load_settings
+
+    base = ROOT / "configs/studies"
+    config = load_settings(base / f"{dataset_id}_transcript_cv_dora_{size}.yaml")
+    original = load_settings(base / f"{dataset_id}_transcript_cv.yaml")
+    assert config["data"] == original["data"]
+    assert config["model"]["parameters"] == {**original["model"]["parameters"], "adapter_method": "dora"}
+    assert config["transcript_study"]["methods"] == (
+        ["frozen_icl", "fine_tuning"] if size == "9b" else ["fine_tuning"]
+    )
+    assert config["model"]["name"] == f"qwen35_{size}"
+    if size == "9b":
+        assert config["model"]["revision"] == "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+    assert create_text_model(config).adapter_method == "dora"

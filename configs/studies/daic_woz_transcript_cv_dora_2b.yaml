@@ -1,0 +1,12 @@
+extends: daic_woz_transcript_cv.yaml
+
+experiment:
+  mode: fine_tuning
+
+model:
+  parameters:
+    adapter_method: dora
+
+transcript_study:
+  name: daic-woz-transcript-cv-dora-2b
+  methods: [fine_tuning]

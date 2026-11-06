@@ -1,0 +1,12 @@
+extends: edaic_transcript_cv_0_8b.yaml
+
+experiment:
+  mode: fine_tuning
+
+model:
+  parameters:
+    adapter_method: dora
+
+transcript_study:
+  name: edaic-transcript-cv-dora-0-8b
+  methods: [fine_tuning]
