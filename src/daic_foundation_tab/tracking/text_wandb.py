@@ -20,6 +20,9 @@ class TextTracker:
             import wandb
 
             load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
+            mode = config["experiment"].get("mode", "fine_tuning")
+            parameters = config["model"].get("parameters", {})
+            adaptation = parameters.get("adapter_method", "lora") if mode == "fine_tuning" else mode
             self.run = wandb.init(
                 project=self.settings.get("project", "daic-foundation-tab"),
                 entity=self.settings.get("entity"),
@@ -29,10 +32,10 @@ class TextTracker:
                 mode=self.settings.get("mode", "offline"),
                 name=f"{config['experiment'].get('name', 'qwen')}-{artifacts.path.name}",
                 group=self.settings.get("group"),
-                job_type=config["experiment"].get("mode", "fine_tuning"),
+                job_type=mode,
                 tags=list(dict.fromkeys([
                     config["model"]["name"], "transcript", config["experiment"]["task"],
-                    config["experiment"].get("mode", "fine_tuning"),
+                    mode, adaptation,
                     *self.settings.get("tags", []),
                 ])),
                 config={
@@ -40,9 +43,10 @@ class TextTracker:
                     "model_id": model_metadata["model_id"],
                     "checkpoint_revision": model_metadata["checkpoint_revision"],
                     "task": config["experiment"]["task"],
-                    "mode": config["experiment"].get("mode", "fine_tuning"),
+                    "mode": mode,
+                    "adaptation": adaptation,
                     "seed": config["project"]["seed"],
-                    "parameters": _redact_paths(config["model"].get("parameters", {})),
+                    "parameters": _redact_paths(parameters),
                     "study": {
                         key: config.get("study", {})[key]
                         for key in ("campaign_id", "manifest_id", "cohort_id", "required_inputs",

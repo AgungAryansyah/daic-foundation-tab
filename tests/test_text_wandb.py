@@ -80,6 +80,8 @@ def test_transcript_campaign_tracks_fold_provenance_and_disables_console(tmp_pat
 def test_native_offline_campaign_tracking_finishes_with_aggregate_metrics(tmp_path, monkeypatch):
     monkeypatch.setenv("WANDB_SILENT", "true")
     config = text_config()
+    config["experiment"]["mode"] = "fine_tuning"
+    config["model"]["parameters"]["adapter_method"] = "dora"
     config["tracking"]["wandb"].update(enabled=True, mode="offline")
     config["study"] = {"transcript_study_id": "study", "parent_study_id": "parent", "fold": 1}
     artifacts = RunArtifacts(tmp_path, "qwen35_2b", "transcript", 42)
@@ -87,6 +89,8 @@ def test_native_offline_campaign_tracking_finishes_with_aggregate_metrics(tmp_pa
     tracker.metrics("cv", {"macro_f1": .5, "raw_answer": "PRIVATE"})
     tracker.metrics("runtime", {"peak_process_ram_mb": 512, "participants_per_second": 2})
     assert tracker.run.config["study"]["fold"] == 1
+    assert tracker.run.config["adaptation"] == "dora"
+    assert "dora" in tracker.run.tags
     assert tracker.run.summary["cv/macro_f1"] == .5
     tracker.finish()
     record = json.loads((artifacts.path / "wandb_run.json").read_text())
