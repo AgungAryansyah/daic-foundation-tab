@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -15,15 +16,15 @@ from tests.test_transcript_study_audit import prepared_input
 @pytest.mark.real_model
 @pytest.mark.skipif(os.environ.get("DAIC_QWEN_CV_SMOKE") != "1", reason="Transcript CUDA smoke tests are opt-in")
 @pytest.mark.parametrize("task", ["classification", "regression"])
-@pytest.mark.parametrize("mode", ["frozen_icl", "fine_tuning"])
-def test_native_hybrid_qwen_fold(tmp_path, monkeypatch, task, mode):
+@pytest.mark.parametrize(("mode", "adapter_method"), [("frozen_icl", None), ("fine_tuning", None), ("fine_tuning", "dora")])
+def test_native_hybrid_qwen_fold(tmp_path, monkeypatch, task, mode, adapter_method):
     torch = pytest.importorskip("torch")
     transformers = pytest.importorskip("transformers")
     pytest.importorskip("peft")
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         pytest.skip("CUDA with BF16 is required")
     torch.set_num_threads(1)
-    bundle = prepared_input(tmp_path)
+    bundle = prepared_input(tmp_path, adapter_method=adapter_method)
     context = read_bundle(bundle)
     condition = next(c for c in context[0]["conditions"]["cv"] if c["task"] == task and c["mode"] == mode)
     originals = []
@@ -58,6 +59,9 @@ def test_native_hybrid_qwen_fold(tmp_path, monkeypatch, task, mode):
                                                "wandb": {"mode": "disabled"}})
     result = write_result(context, condition, output)
     assert bool(result["checkpoints"]) == (mode == "fine_tuning")
+    if mode == "fine_tuning":
+        metadata = json.loads((output / "model_metadata.json").read_text())
+        assert metadata["adaptation"] == (adapter_method or "lora")
     assert all(torch.equal(parameter, before) for parameter, before in originals)
 
 

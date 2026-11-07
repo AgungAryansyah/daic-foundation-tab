@@ -9,8 +9,12 @@ from tests.test_text_prompt import TinyTokenizer
 from tests.test_transcript_study_bundle import transcript_input
 
 
-def prepared_input(tmp_path, family="qwen35_2b"):
+def prepared_input(tmp_path, family="qwen35_2b", *, adapter_method=None):
     config, parent, _ = transcript_input(tmp_path, family=family)
+    if adapter_method is not None:
+        raw = yaml.safe_load(config.read_text())
+        raw.setdefault("model", {}).setdefault("parameters", {})["adapter_method"] = adapter_method
+        config.write_text(yaml.safe_dump(raw))
     bundle = prepare_bundle(config, parent, tmp_path / "transcript", tokenizer=TinyTokenizer())
     return bundle
 
