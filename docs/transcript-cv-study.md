@@ -25,6 +25,33 @@ Standalone 0.8B commands use `configs/examples/qwen35_0_8b/` with `classificatio
 The legacy matched launcher can select this model through its `matched_study.text_profile` setting.
 Use `configs/examples/qwen35_0_8b/base.yaml` for that setting.
 
+## DoRA cross-validation
+
+Use the matching preset under `configs/studies/` for each dataset and checkpoint.
+
+| Dataset | Qwen3.5-0.8B | Qwen3.5-2B | Qwen3.5-9B |
+| --- | --- | --- | --- |
+| E-DAIC | `edaic_transcript_cv_dora_0_8b.yaml` | `edaic_transcript_cv_dora_2b.yaml` | `edaic_transcript_cv_dora_9b.yaml` |
+| DAIC-WOZ | `daic_woz_transcript_cv_dora_0_8b.yaml` | `daic_woz_transcript_cv_dora_2b.yaml` | `daic_woz_transcript_cv_dora_9b.yaml` |
+
+DoRA learns the magnitude of the weight updates separately from their direction. The presets retain BF16, full participant speech, the original folds, and the same adapter rank, learning rate, and epoch count as the LoRA baseline.
+The 0.8B and 2B presets run ten DoRA conditions each. Reuse the saved LoRA and frozen ICL results for these sizes.
+The 9B presets run ten DoRA and ten frozen ICL conditions each. Across both datasets the schedule has 80 CV conditions.
+
+1. Prepare each bundle from the matching historical tabular parent. Check that the tokenizer audit passes.
+2. Run host preflight for both tasks before training. Preflight uses the longest applicable training and evaluation inputs and two adapter updates. The host must have at least 120% of the measured peak memory available. If the 9B preflight fails for capacity on the L4, repeat it on an approved host with at least 48 GB of GPU memory.
+3. Run the CV groups with W&B enabled. Filter W&B runs by `adaptation=dora`, `adaptation=lora`, or `adaptation=frozen_icl`. Keep bundles and participant predictions on approved systems.
+4. Collect the completed reports. Run the comparison below for each pair. Use `fine_tuning` for a LoRA or DoRA report and `frozen_icl` for a frozen ICL report.
+
+```bash
+uv run --no-sync daic-foundation-tab compare-transcript-cv \
+  --reference /private/old-bundle /private/old-report fine_tuning \
+  --candidate /private/dora-bundle /private/dora-report fine_tuning \
+  --output /private/dora-vs-lora
+```
+
+The comparison verifies coverage, transcript identity, targets, and fold assignments. It reports pooled ROC-AUC and MAE, with candidate minus reference and 95% paired bootstrap intervals from 2,000 resamples within folds. A positive ROC-AUC difference and a negative MAE difference favor the candidate. Use the separate hardware-grouped runtime summaries to report compute.
+
 ## Inputs and preparation
 
 Supply authorized transcripts for every participant in the prepared tabular cohort, including development and test participants.
