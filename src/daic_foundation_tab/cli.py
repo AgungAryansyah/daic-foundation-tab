@@ -70,6 +70,10 @@ def _parser() -> argparse.ArgumentParser:
     transcript_collect.add_argument("--stage", choices=["cv", "final"], default="cv")
     transcript_collect.add_argument("--allow-partial", action="store_true")
     transcript_collect.add_argument("--tabular-report", type=Path)
+    transcript_compare = subparsers.add_parser("compare-transcript-cv")
+    for side in ("reference", "candidate"):
+        transcript_compare.add_argument(f"--{side}", required=True, nargs=3, metavar=("BUNDLE", "REPORT", "MODE"))
+    transcript_compare.add_argument("--output", required=True, type=Path)
     run_tabular = subparsers.add_parser("run-tabular-study")
     run_tabular.add_argument("--study", required=True, type=Path)
     run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
@@ -231,6 +235,11 @@ def main() -> None:
 
         print(collect_study(args.study, args.runs, args.output, stage=args.stage,
                             allow_partial=args.allow_partial, tabular_report=args.tabular_report))
+        return
+    if args.command == "compare-transcript-cv":
+        from daic_foundation_tab.transcript_study.comparisons import compare_cv
+
+        print(compare_cv(args.reference, args.candidate, args.output))
         return
     if args.command == "register-tabular-revision":
         from daic_foundation_tab.tabular_study.revisions import register_revision

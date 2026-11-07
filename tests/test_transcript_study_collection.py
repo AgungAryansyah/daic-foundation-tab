@@ -7,6 +7,7 @@ import pytest
 from daic_foundation_tab.transcript_study import groups
 from daic_foundation_tab.transcript_study.bundle import read_bundle
 from daic_foundation_tab.transcript_study.collection import collect_study
+from daic_foundation_tab.transcript_study.comparisons import compare_cv
 from tests.test_transcript_study_audit import prepared_input
 from tests.test_transcript_study_groups import host_input, install_model
 
@@ -54,6 +55,25 @@ def test_collector_rejects_missing_conditions_and_changed_results(tmp_path, monk
         collect_study(bundle, [runs], tmp_path / "report")
     report = collect_study(bundle, [runs], tmp_path / "partial", allow_partial=True)
     assert json.loads((report / "coverage.json").read_text())["status"] == "incomplete"
+
+
+def test_transcript_comparison_validates_report_and_imported_folds(tmp_path, monkeypatch):
+    bundle, runs = completed_campaign(tmp_path, monkeypatch)
+    report = collect_study(bundle, [runs], tmp_path / "report")
+    reference = (bundle, report, "frozen_icl")
+    candidate = (bundle, report, "fine_tuning")
+    result = compare_cv(reference, candidate, tmp_path / "paired")
+    table = pd.read_csv(result)
+    assert table["metric"].tolist() == ["roc_auc", "mae"]
+    assert table["candidate_adaptation"].eq("lora").all()
+    assert table["delta_candidate_minus_reference"].eq(0).all()
+    summary = pd.read_csv(report / "cv_summary.csv")
+    path = report / summary.iloc[0]["predictions_file"]
+    predictions = pd.read_csv(path)
+    predictions.loc[0, "fold"] = 99
+    predictions.to_csv(path, index=False)
+    with pytest.raises(ValueError, match="imported participants, targets, and folds"):
+        compare_cv(reference, candidate, tmp_path / "wrong-folds")
 
 
 def test_final_collection_retains_unlabeled_test_predictions(tmp_path, monkeypatch):
