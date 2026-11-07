@@ -5,6 +5,7 @@ import math
 import shutil
 from collections.abc import Sequence
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,11 @@ def load_text_tokenizer(model_config: dict):
 def require_adapter_method(config_path: Path, method: str) -> None:
     if json.loads(config_path.read_text()).get("use_dora", False) is not (method == "dora"):
         raise ValueError("Checkpoint adapter method differs from the configured method")
+
+
+def _nonzero_norm(get_weight_norm, epsilon, *args, **kwargs):
+    norm = get_weight_norm(*args, **kwargs)
+    return norm.masked_fill(norm == 0, epsilon)
 
 
 class QwenTextModel:
@@ -179,6 +185,22 @@ class QwenTextModel:
             )["roc_auc"]
         return regression_metrics(target, [item.value for item in predictions])["mae"]
 
+    def _guard_dora_norms(self, *, initialize=False):
+        if self.adapter_method != "dora":
+            return
+        import torch
+        from peft.tuners.lora.dora import DoraLinearLayer
+
+        epsilon = torch.finfo(torch.float32).eps
+        for layer in self.model.modules():
+            if type(layer) is not DoraLinearLayer or "get_weight_norm" in vars(layer):
+                continue
+            # Some Qwen checkpoints have all-zero projection rows, which make PEFT divide 0 by 0.
+            layer.get_weight_norm = partial(_nonzero_norm, layer.get_weight_norm, epsilon)
+            if initialize:
+                with torch.no_grad():
+                    layer.weight.masked_fill_(layer.weight == 0, epsilon)
+
     def fit(self, training, validation, checkpoint_directory: Path, progress=None, resume=False,
             epoch_callback=None):
         import torch
@@ -237,6 +259,7 @@ class QwenTextModel:
                     use_dora=self.adapter_method == "dora",
                 ),
             )
+        self._guard_dora_norms(initialize=not resume)
         trainable = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
         if self.parameters.get("gradient_checkpointing", False):
             self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -343,6 +366,7 @@ class QwenTextModel:
             raise ValueError("The selected adapter checkpoint is missing")
         require_adapter_method(selected / "adapter_config.json", self.adapter_method)
         self.model.load_adapter(selected, adapter_name="selected", is_trainable=False)
+        self._guard_dora_norms()
         self.model.set_adapter("selected")
         self.model.requires_grad_(False)
         self.model.eval()
@@ -355,6 +379,7 @@ class QwenTextModel:
         if self.encoder is None:
             self.prepare([])
         self.model = PeftModel.from_pretrained(self.model, path, is_trainable=False)
+        self._guard_dora_norms()
         self.model.requires_grad_(False)
         self.model.eval()
 

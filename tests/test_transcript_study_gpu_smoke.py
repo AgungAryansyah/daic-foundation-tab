@@ -40,6 +40,8 @@ def test_native_hybrid_qwen_fold(tmp_path, monkeypatch, task, mode, adapter_meth
             eos_token_id=2, pad_token_id=2,
         )
         model = transformers.Qwen3_5ForCausalLM(native_config).to(device="cuda:0", dtype=torch.bfloat16)
+        with torch.no_grad():
+            model.model.layers[0].linear_attn.in_proj_qkv.weight[0].zero_()
         tokenizer = TinyTokenizer()
         if task == "regression":
             generate = model.generate
