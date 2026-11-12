@@ -44,3 +44,16 @@ def test_collect_regression_test_results_command(monkeypatch, tmp_path: Path, ca
 
     assert capsys.readouterr().out.strip() == str(tmp_path / "regression_test_evaluations.csv")
     assert (tmp_path / "regression_test_evaluations.csv").is_file()
+
+
+def test_plot_results_uses_project_output_paths(monkeypatch) -> None:
+    rendered = []
+    monkeypatch.setattr(
+        "daic_foundation_tab.plot_results.render_results",
+        lambda data, output: rendered.append((data, output)),
+    )
+    monkeypatch.setattr(sys, "argv", ["daic-foundation-tab", "plot-results"])
+
+    main()
+
+    assert rendered == [(Path("outputs/results_snapshot.json"), Path("outputs"))]

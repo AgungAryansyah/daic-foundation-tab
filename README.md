@@ -410,6 +410,11 @@ uv run --python 3.12 python -m daic_foundation_tab.cli collect-regression-test-r
 
 W&B charts each model's real per-epoch mean training loss and validation metrics, then records model-selection metadata, development and test metrics, bootstrap summaries, repeated-holdout metric rows, and runtime metadata. The immutable `research-record` artifact retains the sanitized configuration, dataset and study fingerprints, cohort-level train/validation/development/test statistics, and fine-tuning history. Participant IDs, raw targets, feature values, manifests, split assignments, predictions, raw inputs, local paths, and checkpoints remain local and are never uploaded.
 
+## Experiment figures
+
+Use `plot-results` to render the aggregate results snapshot as PNG and PDF figures. See the
+[figure guide](docs/experiment-figures.md) for the command, input, and figure definitions.
+
 ## Research use
 
 DAIC-WOZ is an extreme-small-N dataset. These experiments are a leakage-safe feasibility study and must not be presented as clinical-use, superiority, or state-of-the-art claims.

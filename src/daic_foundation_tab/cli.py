@@ -90,6 +90,9 @@ def _parser() -> argparse.ArgumentParser:
     collect.add_argument("--output-root", type=Path, default=Path("outputs"))
     collect_regression = subparsers.add_parser("collect-regression-test-results")
     collect_regression.add_argument("--output-root", type=Path, default=Path("outputs"))
+    plot = subparsers.add_parser("plot-results", help="Render experiment figures from aggregate results")
+    plot.add_argument("--data", type=Path, default=Path("outputs/results_snapshot.json"))
+    plot.add_argument("--output", type=Path, default=Path("outputs"))
     return parser
 
 
@@ -293,6 +296,11 @@ def main() -> None:
         return
     if args.command == "collect-regression-test-results":
         print(collect_regression_test_evaluations(args.output_root))
+        return
+    if args.command == "plot-results":
+        from daic_foundation_tab.plot_results import render_results
+
+        render_results(args.data, args.output)
         return
     config = load_config(args.config)
     if args.command == "prepare-participants":
