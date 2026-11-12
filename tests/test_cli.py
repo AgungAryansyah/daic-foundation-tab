@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from daic_foundation_tab.cli import _compare, _validate, main
+from daic_foundation_tab.cli import _compare, _parser, _validate, main
 
 from .helpers import write_synthetic_dataset
 
@@ -57,3 +57,21 @@ def test_plot_results_uses_project_output_paths(monkeypatch) -> None:
     main()
 
     assert rendered == [(Path("outputs/results_snapshot.json"), Path("outputs"))]
+
+
+def test_run_tabular_study_accepts_kumo_large():
+    args = _parser().parse_args(
+        [
+            "run-tabular-study",
+            "--study",
+            "bundle",
+            "--model",
+            "kumo_large",
+            "--modality",
+            "audio",
+            "--host-config",
+            "host.yaml",
+        ]
+    )
+
+    assert args.model == "kumo_large"

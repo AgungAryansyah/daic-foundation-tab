@@ -1,0 +1,5 @@
+extends: edaic_tabular_cv.yaml
+
+tabular_study:
+  name: edaic-kumo-large-tabular-cv
+  model_families: [kumo_large]

@@ -141,6 +141,22 @@ def test_dependency_check_rejects_version_changes():
         execution._check_dependencies(versions)
 
 
+@pytest.mark.parametrize(
+    "mode,detail,expected",
+    [
+        ("frozen_icl", {"checkpoint_sha256": "a" * 64}, "a" * 64),
+        ("fine_tuning", {"source_checkpoint_sha256": "b" * 64}, "b" * 64),
+    ],
+)
+def test_kumo_large_uses_its_source_checkpoint_hash(mode, detail, expected):
+    assert (
+        execution._source_checkpoint_hash(
+            {"family": "kumo_large", "mode": mode, "task": "classification"}, detail
+        )
+        == expected
+    )
+
+
 def test_cv_wandb_offline_tracks_aggregate_metrics_without_participants(prepared, tmp_path, monkeypatch):
     monkeypatch.setenv("WANDB_SILENT", "true")
     bundle, _ = prepared

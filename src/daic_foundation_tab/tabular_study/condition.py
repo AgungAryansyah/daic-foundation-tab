@@ -59,7 +59,7 @@ def _check_dependencies(versions: dict) -> None:
 def _source_checkpoint_hash(condition: dict, detail: dict) -> str:
     if condition["mode"] == "frozen_icl":
         digest = detail["checkpoint_sha256"]
-    elif condition["family"] == "kumo_medium":
+    elif condition["family"] in {"kumo_medium", "kumo_large"}:
         digest = detail["source_checkpoint_sha256"]
     else:
         from tabpfn.model_loading import resolve_model_path

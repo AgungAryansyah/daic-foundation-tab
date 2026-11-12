@@ -76,7 +76,9 @@ def _parser() -> argparse.ArgumentParser:
     transcript_compare.add_argument("--output", required=True, type=Path)
     run_tabular = subparsers.add_parser("run-tabular-study")
     run_tabular.add_argument("--study", required=True, type=Path)
-    run_tabular.add_argument("--model", required=True, choices=["tabpfn35", "kumo_medium"])
+    run_tabular.add_argument(
+        "--model", required=True, choices=["tabpfn35", "kumo_medium", "kumo_large"]
+    )
     run_tabular.add_argument("--modality", required=True, choices=["audio", "visual", "audio_visual"])
     run_tabular.add_argument("--host-config", required=True, type=Path)
     run_tabular.add_argument("--stage", default="cv", choices=["cv", "final"])

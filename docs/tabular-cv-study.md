@@ -24,6 +24,34 @@ For E-DAIC, use `configs/studies/edaic_tabular_cv.yaml` and a separate destinati
 
 Run E-DAIC first, then prepare and run DAIC-WOZ when its data is available. The total is 240 cross-validation conditions with one model seed. Prepare, execute, and collect each dataset separately. Each bundle has its own study identity and fold assignments. W&B records `data.dataset_id` and a separate study group. Compare fine-tuning with ICL within each dataset and report dataset results separately. This procedure does not train on one dataset and evaluate on the other.
 
+## Run the Kumo Large study
+
+The DAIC-WOZ configuration is `configs/studies/daic_woz_tabular_cv_kumo_large.yaml`.
+The E-DAIC configuration is `configs/studies/edaic_tabular_cv_kumo_large.yaml`.
+Each preset schedules 60 cross-validation conditions across three feature sets, two methods, two tasks, and five folds.
+The optional final stage has 12 conditions.
+Each preset inherits the participant and fold settings from its dataset's default study.
+The model profiles pin the Large classifier and regressor weights and the `structured-data-models` revision.
+
+Prepare the bundle with the Kumo Large configuration for your dataset.
+
+```bash
+uv run --no-sync daic-foundation-tab prepare-tabular-study \
+  --config configs/studies/edaic_tabular_cv_kumo_large.yaml \
+  --output outputs/edaic-kumo-large-study
+```
+
+Use the host configuration procedure below.
+Run each of the three feature groups with `--model kumo_large`.
+
+```bash
+uv run --no-sync daic-foundation-tab run-tabular-study \
+  --study outputs/edaic-kumo-large-study --model kumo_large --modality audio \
+  --host-config /private/host.yaml
+```
+
+Collect results against the matching Kumo Large bundle.
+
 ## Run independent groups
 
 Create a host-specific YAML file outside version control, for example:
@@ -93,4 +121,11 @@ The opt-in smoke tests use synthetic participants and a one-epoch fine-tuning pr
 
 ```bash
 DAIC_RUN_TABULAR_CV_SMOKE=1 uv run --no-sync pytest -q tests/test_tabular_study_gpu_smoke.py -m real_model
+```
+
+Use this command to run the four Kumo Large checks on synthetic data.
+
+```bash
+DAIC_RUN_TABULAR_CV_SMOKE=1 uv run --no-sync pytest -q \
+  tests/test_tabular_study_gpu_smoke.py::test_real_gpu_fold_condition -k kumo_large -m real_model
 ```

@@ -9,7 +9,7 @@ import yaml
 from daic_foundation_tab.config import ConfigError, deep_merge, load_config, validate_config
 
 OPTIONS = {
-    "model_families": {"tabpfn35", "kumo_medium"},
+    "model_families": {"tabpfn35", "kumo_medium", "kumo_large"},
     "modalities": {"audio", "visual", "audio_visual"},
     "tasks": {"classification", "regression"},
     "methods": {"frozen_icl", "fine_tuning"},

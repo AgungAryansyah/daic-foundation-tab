@@ -1,0 +1,5 @@
+extends: daic_woz_tabular_cv.yaml
+
+tabular_study:
+  name: daic-woz-kumo-large-tabular-cv
+  model_families: [kumo_large]

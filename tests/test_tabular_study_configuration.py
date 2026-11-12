@@ -40,6 +40,38 @@ def test_default_study_resolves_all_conditions_and_profiles(filename, dataset):
 
 
 @pytest.mark.parametrize(
+    "filename,dataset,name",
+    [
+        (
+            "daic_woz_tabular_cv_kumo_large.yaml",
+            "daic_woz",
+            "daic-woz-kumo-large-tabular-cv",
+        ),
+        ("edaic_tabular_cv_kumo_large.yaml", "edaic", "edaic-kumo-large-tabular-cv"),
+    ],
+)
+def test_kumo_large_studies_resolve_pinned_profiles_and_schedule(filename, dataset, name):
+    config = load_study_config(PRESET.parent / filename)
+
+    assert config["data"]["dataset_id"] == dataset
+    assert config["tabular_study"]["name"] == name
+    assert config["tabular_study"]["model_families"] == ["kumo_large"]
+    assert len(condition_specs(config)) == 60
+    assert len(condition_specs(config, "final")) == 12
+    assert {item["family"] for item in condition_specs(config)} == {"kumo_large"}
+    assert set(config["profiles"]) == {
+        f"kumo_large:{task}:{mode}"
+        for task in ("classification", "regression")
+        for mode in ("frozen_icl", "fine_tuning")
+    }
+    for profile in config["profiles"].values():
+        assert profile["size"] == "large"
+        assert profile["model_version"] == "v1.0.1"
+        assert profile["package_revision"] == "842c408fe2a8711bdf2e7cff4bfbe54266d6b940"
+        assert profile["checkpoint_revision"] == "3c3e10bbdb590ace29e7026847f92db3c603096d"
+
+
+@pytest.mark.parametrize(
     "key,value",
     [
         ("model_seeds", [42, 42]),
