@@ -1,0 +1,6 @@
+extends: kumo_medium_ft_regressor.yaml
+
+model:
+  name: kumo_large_ft_regressor
+  size: large
+  checkpoint_version: large/regressor.pt

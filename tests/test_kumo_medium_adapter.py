@@ -131,12 +131,19 @@ def fit_model(model, directory, callback=None):
 
 
 @pytest.mark.parametrize("regression", [False, True])
-def test_constructor_loads_explicit_medium_task_and_pinned_source(
-    monkeypatch, tmp_path, regression
+@pytest.mark.parametrize("size", ["medium", "large"])
+def test_constructor_loads_explicit_size_task_and_pinned_source(
+    monkeypatch, tmp_path, regression, size
 ):
     import huggingface_hub
 
-    model = create_model(model_config(regression))
+    config = model_config(regression)
+    config.update(
+        name=config["name"].replace("medium", size),
+        size=size,
+        checkpoint_version=config["checkpoint_version"].replace("medium", size),
+    )
+    model = create_model(config)
     model._device = torch.device("cpu")
     child = torch.nn.Linear(3, 2)
     source = tmp_path / "source.pt"
@@ -159,14 +166,15 @@ def test_constructor_loads_explicit_medium_task_and_pinned_source(
     assert calls == [
         {
             "repo_id": MODEL_REPOSITORY,
-            "filename": f"medium/{'regressor' if regression else 'classifier'}.pt",
+            "filename": f"{size}/{'regressor' if regression else 'classifier'}.pt",
             "revision": CHECKPOINT_REVISION,
         },
-        {"task": model.task, "size": "medium", "pretrained": False, "device": torch.device("cpu")},
+        {"task": model.task, "size": size, "pretrained": False, "device": torch.device("cpu")},
     ]
     assert loaded == source
     assert torch.equal(native.models[model.task].weight, child.weight)
     assert model.run_metadata()["package_revision"] == PACKAGE_REVISION
+    assert model.run_metadata()["size"] == size
 
 
 @pytest.mark.parametrize("regression", [False, True])

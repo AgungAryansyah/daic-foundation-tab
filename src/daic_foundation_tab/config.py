@@ -89,35 +89,35 @@ def validate_config(config: Mapping[str, Any]) -> None:
     if model_name == "tabiclv2":
         raise ConfigError("Use tabiclv2_ft for fine-tuning or tabiclv2_icl for frozen inference")
     suffix = "_regressor" if task == "regression" else ""
-    families = ("tabiclv2", "tabpfn35", "kumo_medium")
+    from daic_foundation_tab.models.kumo_medium_ft import (
+        KUMO_SIZES,
+        validate_kumo_config,
+        validate_kumo_identity,
+    )
+
+    families = ("tabiclv2", "tabpfn35", *KUMO_SIZES)
     method = "icl" if mode == "frozen_icl" else "ft"
     expected_models = tuple(f"{family}_{method}{suffix}" for family in families)
     if model_name not in expected_models:
         raise ConfigError(f"{task} requires model.name to be {' or '.join(expected_models)}")
-    is_tabpfn = model_name.startswith("tabpfn35")
-    is_kumo = model_name.startswith("kumo_medium")
+    family = model_name.removesuffix(f"_{method}{suffix}")
+    is_tabpfn = family == "tabpfn35"
+    is_kumo = family in KUMO_SIZES
     is_icl = mode == "frozen_icl"
-    if is_icl:
+    if is_icl and not is_kumo:
         expected_checkpoint = {
             "tabiclv2": "tabicl-regressor-v2-20260212.ckpt"
             if task == "regression"
             else "tabicl-classifier-v2-20260212.ckpt",
             "tabpfn35": "tabpfn-v3.5-20260909.safetensors",
-            "kumo_medium": "medium/regressor.pt"
-            if task == "regression"
-            else "medium/classifier.pt",
-        }[model_name.removesuffix("_regressor").removesuffix("_icl")]
+        }[family]
         if config["model"].get("checkpoint_version") != expected_checkpoint:
             raise ConfigError(f"Frozen ICL requires checkpoint {expected_checkpoint!r}")
-        if is_kumo:
-            expected_kumo = {
-                "size": "medium",
-                "model_version": "v1.0.1",
-                "package_revision": "842c408fe2a8711bdf2e7cff4bfbe54266d6b940",
-                "checkpoint_revision": "3c3e10bbdb590ace29e7026847f92db3c603096d",
-            }
-            if any(config["model"].get(key) != value for key, value in expected_kumo.items()):
-                raise ConfigError("Frozen Kumo ICL requires the pinned Medium model and checkpoint")
+    if is_icl and is_kumo:
+        try:
+            validate_kumo_identity(config["model"], KUMO_SIZES[family], task)
+        except ValueError as error:
+            raise ConfigError(str(error)) from error
     if is_tabpfn and config["model"].get("model_version") != "v3.5":
         raise ConfigError("TabPFN-3.5 requires model.model_version to be v3.5")
     runtime = config["runtime"]
@@ -131,8 +131,6 @@ def validate_config(config: Mapping[str, Any]) -> None:
     if not isinstance(parameters, Mapping):
         raise ConfigError("model.parameters must be a mapping")
     if is_kumo and not is_icl:
-        from daic_foundation_tab.models.kumo_medium_ft import validate_kumo_config
-
         try:
             validate_kumo_config(config["model"])
         except ValueError as error:

@@ -229,7 +229,8 @@ def test_tabicl_and_tabpfn_adapters_configure_frozen_icl_context(
         np.testing.assert_allclose(model.predict(features), np.zeros(4))
 
 
-def test_kumo_adapter_loads_pinned_weights_and_uses_icl_context(monkeypatch, tmp_path):
+@pytest.mark.parametrize("model_size", ["medium", "large"])
+def test_kumo_adapter_loads_pinned_weights_and_uses_icl_context(monkeypatch, tmp_path, model_size):
     checkpoint = tmp_path / "classifier.pt"
     checkpoint.write_bytes(b"weights")
 
@@ -249,7 +250,7 @@ def test_kumo_adapter_loads_pinned_weights_and_uses_icl_context(monkeypatch, tmp
             super().__init__()
             assert (task, size, pretrained, device) == (
                 "classification",
-                "medium",
+                model_size,
                 False,
                 "cuda:0",
             )
@@ -286,12 +287,13 @@ def test_kumo_adapter_loads_pinned_weights_and_uses_icl_context(monkeypatch, tmp
         lambda *args, **kwargs: {"weight": torch.ones((2, 1)), "bias": torch.zeros(2)},
     )
 
-    model = create_model(_model_config("kumo_medium_icl", checkpoint))
+    model = create_model(_model_config(f"kumo_{model_size}_icl", checkpoint))
     features = pd.DataFrame({"signal": [1.0, 2.0, 3.0, 4.0]})
     model.fit_context(features, pd.Series([0, 1, 0, 1]))
 
     assert model._estimator.fit_arguments == (4, 4, 8, "seeded")
     np.testing.assert_allclose(model.predict_proba(features), [[0.8, 0.2]] * 4)
+    assert model.run_metadata()["size"] == model_size
     assert model.run_metadata()["checkpoint_sha256"] == model.icl_metadata()["checkpoint_sha256"]
 
 

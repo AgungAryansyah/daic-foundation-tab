@@ -1,0 +1,6 @@
+extends: kumo_medium_icl.yaml
+
+model:
+  name: kumo_large_icl
+  size: large
+  checkpoint_version: large/classifier.pt

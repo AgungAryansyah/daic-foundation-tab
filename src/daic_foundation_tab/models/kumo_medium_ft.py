@@ -18,6 +18,7 @@ PACKAGE_REVISION = "842c408fe2a8711bdf2e7cff4bfbe54266d6b940"
 CHECKPOINT_REVISION = "3c3e10bbdb590ace29e7026847f92db3c603096d"
 MODEL_REPOSITORY = "nvidia/Kumo-Tabular"
 MODEL_VERSION = "v1.0.1"
+KUMO_SIZES = {"kumo_medium": "medium", "kumo_large": "large"}
 _PARAMETERS = {
     "epochs",
     "learning_rate",
@@ -42,28 +43,34 @@ class KumoMediumFineTuningError(RuntimeError):
     pass
 
 
-def validate_kumo_config(config: Mapping[str, Any]) -> None:
-    regression = config.get("name") == "kumo_medium_ft_regressor"
-    checkpoint = f"medium/{'regressor' if regression else 'classifier'}.pt"
+def validate_kumo_identity(config: Mapping[str, Any], size: str, task: str) -> None:
+    checkpoint = f"{size}/{'regressor' if task == 'regression' else 'classifier'}.pt"
     for key, expected in (
         ("model_version", MODEL_VERSION),
-        ("size", "medium"),
+        ("size", size),
         ("package_revision", PACKAGE_REVISION),
         ("checkpoint_revision", CHECKPOINT_REVISION),
         ("checkpoint_version", checkpoint),
     ):
         if config.get(key) != expected:
-            raise ValueError(f"Kumo Medium requires model.{key}={expected!r}")
+            raise ValueError(f"Kumo {size.title()} requires model.{key}={expected!r}")
+
+
+def validate_kumo_config(config: Mapping[str, Any]) -> None:
+    name = config["name"]
+    family = name.removesuffix("_regressor").removesuffix("_ft")
+    regression = name.endswith("_regressor")
+    validate_kumo_identity(config, KUMO_SIZES[family], "regression" if regression else "classification")
     parameters = config["parameters"]
     unknown = set(parameters) - _PARAMETERS
     if unknown or _PARAMETERS - set(parameters):
         raise ValueError(
-            "Kumo Medium parameters must match its model preset; unsupported or missing arguments"
+            "Kumo parameters must match its model preset; unsupported or missing arguments"
         )
     if parameters["device"] != "cuda:0" or parameters["amp"] is not True:
-        raise ValueError("Kumo Medium requires cuda:0 and amp=True")
+        raise ValueError("Kumo requires cuda:0 and amp=True")
     if parameters["eval_metric"] != ("mse" if regression else "roc_auc"):
-        raise ValueError("Kumo Medium requires MSE regression or ROC-AUC classification selection")
+        raise ValueError("Kumo requires MSE regression or ROC-AUC classification selection")
     for key in (
         "epochs",
         "patience",
@@ -73,13 +80,13 @@ def validate_kumo_config(config: Mapping[str, Any]) -> None:
     ):
         value = parameters[key]
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-            raise ValueError(f"Kumo Medium {key} must be a positive integer")
+            raise ValueError(f"Kumo {key} must be a positive integer")
     maximum = parameters["max_data_size"]
     if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < 3:
-        raise ValueError("Kumo Medium max_data_size must be an integer of at least three")
+        raise ValueError("Kumo max_data_size must be an integer of at least three")
     seed = parameters["random_state"]
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
-        raise ValueError("Kumo Medium random_state must be a nonnegative integer")
+        raise ValueError("Kumo random_state must be a nonnegative integer")
     for key in (
         "learning_rate",
         "weight_decay",
@@ -94,13 +101,13 @@ def validate_kumo_config(config: Mapping[str, Any]) -> None:
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
         ):
-            raise ValueError(f"Kumo Medium {key} must be finite")
+            raise ValueError(f"Kumo {key} must be finite")
         if value < 0 or (key in {"learning_rate", "grad_clip"} and value == 0):
-            raise ValueError(f"Kumo Medium {key} is out of range")
+            raise ValueError(f"Kumo {key} is out of range")
     if not 0 < parameters["finetune_ctx_query_ratio"] < 1:
-        raise ValueError("Kumo Medium query fraction must be between zero and one")
+        raise ValueError("Kumo query fraction must be between zero and one")
     if not 0 <= parameters["warmup_proportion"] < 1:
-        raise ValueError("Kumo Medium warmup proportion must be in [0, 1)")
+        raise ValueError("Kumo warmup proportion must be in [0, 1)")
 
 
 class KumoMediumFineTunedModel:
@@ -142,7 +149,7 @@ class KumoMediumFineTunedModel:
             )
         )
         model = sdm.models.KumoTabular(
-            task=self.task, size="medium", pretrained=False, device=self._device
+            task=self.task, size=self._config["size"], pretrained=False, device=self._device
         )
         model.models[self.task].load_state_dict(
             torch.load(source, map_location=self._device, weights_only=True),
@@ -477,8 +484,10 @@ class KumoMediumFineTunedModel:
             package_version = version("structured-data-models")
         except PackageNotFoundError:
             package_version = None
+        size = self._config["size"]
+        suffix = "-Regressor" if self.task == "regression" else ""
         return {
-            "model_name": f"Kumo-Tabular-Medium-FT{'-Regressor' if self.task == 'regression' else ''}",
+            "model_name": f"Kumo-Tabular-{size.title()}-FT{suffix}",
             "package": "structured-data-models",
             "package_version": package_version,
             "package_revision": self._package_revision(),
@@ -486,7 +495,7 @@ class KumoMediumFineTunedModel:
             "checkpoint": self._config["checkpoint_version"],
             "checkpoint_revision": CHECKPOINT_REVISION,
             "model_repository": MODEL_REPOSITORY,
-            "size": "medium",
+            "size": size,
             "parameters": dict(self._parameters),
         }
 

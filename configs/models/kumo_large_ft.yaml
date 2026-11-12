@@ -1,0 +1,6 @@
+extends: kumo_medium_ft.yaml
+
+model:
+  name: kumo_large_ft
+  size: large
+  checkpoint_version: large/classifier.pt

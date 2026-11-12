@@ -41,9 +41,9 @@ def create_model(
     name = model_config.get("name")
     if name.endswith(("_icl", "_icl_regressor")):
         return create_icl_model(model_config)
-    if name == "kumo_medium_ft":
+    if name in {"kumo_medium_ft", "kumo_large_ft"}:
         return KumoMediumFineTunedModel(model_config)
-    if name == "kumo_medium_ft_regressor":
+    if name in {"kumo_medium_ft_regressor", "kumo_large_ft_regressor"}:
         return KumoMediumFineTunedRegressor(model_config)
     if name == "tabiclv2_ft":
         return TabICLv2FineTunedModel(model_config)

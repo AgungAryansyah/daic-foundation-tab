@@ -11,7 +11,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .kumo_medium_ft import CHECKPOINT_REVISION, MODEL_REPOSITORY, MODEL_VERSION, PACKAGE_REVISION
+from .kumo_medium_ft import (
+    CHECKPOINT_REVISION,
+    KUMO_SIZES,
+    MODEL_REPOSITORY,
+    MODEL_VERSION,
+    PACKAGE_REVISION,
+)
 
 
 class FrozenICLError(RuntimeError):
@@ -58,7 +64,7 @@ class FrozenICLModel:
     def _modules(self) -> list[torch.nn.Module]:
         if self._estimator is None:
             raise FrozenICLError("Call fit_context before prediction")
-        if self.family == "kumo_medium":
+        if self.family in KUMO_SIZES:
             modules = [self._estimator]
         else:
             fitted_models = getattr(self._estimator, "models_", None)
@@ -108,13 +114,13 @@ class FrozenICLModel:
             raise FrozenICLError("Classification context must contain both binary classes only")
 
         self._columns = list(features.columns)
-        self._classes = np.array([0, 1]) if self.family == "kumo_medium" else None
+        self._classes = np.array([0, 1]) if self.family in KUMO_SIZES else None
         self._context_rows = len(features)
         self._estimator = None
         self._weight_digest = None
         with torch.inference_mode():
             self._checkpoint_path = self._load_and_fit_context(features, target)
-        if self.task == "classification" and self.family != "kumo_medium":
+        if self.task == "classification" and self.family not in KUMO_SIZES:
             classes = getattr(self._estimator, "classes_", None)
             if classes is None or set(np.asarray(classes).tolist()) != {0, 1}:
                 raise FrozenICLError("Classifier context must initialize classes 0 and 1")
@@ -128,7 +134,7 @@ class FrozenICLModel:
         if list(features.columns) != self._columns:
             raise FrozenICLError("Prediction columns must match the ICL context columns")
         with torch.inference_mode():
-            if self.family == "kumo_medium":
+            if self.family in KUMO_SIZES:
                 with torch.amp.autocast("cuda", dtype=torch.float16):
                     result = self._kumo_prediction(
                         self._estimator.predict(self._kumo_table(features))
@@ -196,16 +202,14 @@ class FrozenICLModel:
         if self._checkpoint_path is None:
             raise FrozenICLError("Call fit_context before requesting model metadata")
         digest = self._file_digest(self._checkpoint_path)
-        model = {
-            "tabiclv2": "TabICLv2-ICL",
-            "tabpfn35": "TabPFN-3.5-ICL",
-            "kumo_medium": "Kumo-Tabular-Medium-ICL",
-        }[self.family]
-        package = {
-            "tabiclv2": "tabicl",
-            "tabpfn35": "tabpfn",
-            "kumo_medium": "structured-data-models",
-        }[self.family]
+        kumo_size = KUMO_SIZES.get(self.family)
+        if kumo_size:
+            model, package = f"Kumo-Tabular-{kumo_size.title()}-ICL", "structured-data-models"
+        else:
+            model, package = {
+                "tabiclv2": ("TabICLv2-ICL", "tabicl"),
+                "tabpfn35": ("TabPFN-3.5-ICL", "tabpfn"),
+            }[self.family]
         try:
             package_version = version(package)
         except PackageNotFoundError:
@@ -222,13 +226,13 @@ class FrozenICLModel:
         }
         if self.family == "tabpfn35":
             metadata["model_version"] = "v3.5"
-        if self.family == "kumo_medium":
+        if kumo_size:
             metadata.update({
                 "model_version": MODEL_VERSION,
                 "package_revision": PACKAGE_REVISION,
                 "checkpoint_revision": CHECKPOINT_REVISION,
                 "model_repository": MODEL_REPOSITORY,
-                "size": "medium",
+                "size": kumo_size,
             })
         return metadata
 
@@ -334,7 +338,10 @@ class FrozenICLClassifier(FrozenICLModel):
             )
         )
         self._estimator = sdm.models.KumoTabular(
-            task=self.task, size="medium", pretrained=False, device=self._parameters["device"]
+            task=self.task,
+            size=KUMO_SIZES[self.family],
+            pretrained=False,
+            device=self._parameters["device"],
         )
         self._estimator.models[self.task].load_state_dict(
             torch.load(checkpoint, map_location=self._parameters["device"], weights_only=True),
@@ -406,7 +413,7 @@ def create_icl_model(config: dict[str, Any]) -> FrozenICLModel:
     name = config.get("name", "")
     regression = name.endswith("_regressor")
     family = name.removesuffix("_regressor").removesuffix("_icl")
-    if family not in {"tabiclv2", "tabpfn35", "kumo_medium"}:
+    if family not in {"tabiclv2", "tabpfn35", *KUMO_SIZES}:
         raise FrozenICLError(f"Unsupported frozen ICL model: {name}")
     model = FrozenICLRegressor if regression else FrozenICLClassifier
     instance = model({**config, "family": family})

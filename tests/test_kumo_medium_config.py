@@ -75,6 +75,23 @@ def test_kumo_rejects_wrong_model_identity(key, value):
         validate_config(config)
 
 
+@pytest.mark.parametrize(("mode", "profile"), [("frozen_icl", "icl"), ("fine_tuning", "ft")])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("size", "medium"), ("checkpoint_version", "large/regressor.pt")],
+)
+def test_kumo_large_rejects_mismatched_size_or_task(mode, profile, key, value):
+    config = load_config(PRESETS[0])
+    config["experiment"].update(task="classification", mode=mode)
+    config["model"] = load_config(
+        Path("configs/models") / f"kumo_large_{profile}.yaml", _validate=False
+    )["model"]
+    validate_config(config)
+    config["model"][key] = value
+    with pytest.raises(ConfigError, match=key):
+        validate_config(config)
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

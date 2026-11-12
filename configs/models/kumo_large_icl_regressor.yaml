@@ -1,0 +1,6 @@
+extends: kumo_medium_icl_regressor.yaml
+
+model:
+  name: kumo_large_icl_regressor
+  size: large
+  checkpoint_version: large/regressor.pt
