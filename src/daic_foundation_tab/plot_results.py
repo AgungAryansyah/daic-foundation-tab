@@ -166,14 +166,20 @@ def coverage_figure(folds):
     return fig
 
 
-def fold_panel(ax, folds, labels, groups, dataset, task, methods, limits):
-    metric = METRICS[task]
+def fold_scores(folds, dataset, task):
+    metric = f"cv/{METRICS[task]}"
     lookup = defaultdict(list)
     for run in folds:
         if run["dataset"] == dataset and run["task"] == task:
-            value = run["metrics"].get(f"cv/{metric}")
+            value = run["metrics"].get(metric)
             if value is not None:
                 lookup[run["model"], run["input"], run["method"]].append((run["fold"], value))
+    return lookup
+
+
+def fold_panel(ax, folds, labels, groups, dataset, task, methods, limits):
+    metric = METRICS[task]
+    lookup = fold_scores(folds, dataset, task)
     yrows(ax, labels)
     for row, (model, input_) in enumerate(groups):
         for i, method in enumerate(methods):
@@ -224,24 +230,27 @@ def fold_panel(ax, folds, labels, groups, dataset, task, methods, limits):
         ax.axvline(0.5, color=REFERENCE, linewidth=1, linestyle="--", zorder=1)
 
 
-def fold_figure(folds, transcript):
+def fold_settings(folds, transcript):
     if transcript:
         methods = ("frozen_icl", "lora", "dora")
         models = [model for model in QWEN_MODELS if any(r["model"] == model for r in folds)]
         groups = [(model, "transcript") for model in models]
         labels = [MODELS[model] for model in models]
-        heading = "Transcript cross-validation"
     else:
         methods = ("frozen_icl", "fine_tuning")
         groups = [(model, input_) for model in TABULAR_MODELS for input_ in INPUTS]
         labels = [f"{MODELS[model]} · {INPUTS[input_]}" for model, input_ in groups]
-        heading = "Tabular cross-validation"
+    return groups, labels, methods
+
+
+def fold_figure(folds, transcript):
+    groups, labels, methods = fold_settings(folds, transcript)
     selected = [r for r in folds if r["model"] in (QWEN_MODELS if transcript else TABULAR_MODELS)]
     errors = [r["metrics"]["cv/mae"] for r in selected if "cv/mae" in r["metrics"]]
     upper_mae = max(1, max(errors, default=1) * 1.12)
     fig = Figure(figsize=(13.2, 7.6 if transcript else 9.2))
     axes = fig.subplots(2, 2)
-    title(fig, heading)
+    title(fig, "Transcript cross-validation" if transcript else "Tabular cross-validation")
     fig.subplots_adjust(
         left=0.225 if not transcript else 0.165,
         right=0.968,
@@ -273,6 +282,84 @@ def fold_figure(folds, transcript):
                 methods,
                 (0, 1) if task == "classification" else (0, upper_mae),
             )
+    return fig
+
+
+def fold_table_panel(ax, scores, groups, labels, methods):
+    rows = []
+    for (model, input_), label in zip(groups, labels):
+        for method in methods:
+            observations = scores[model, input_, method]
+            if not observations:
+                continue
+            values_by_fold = defaultdict(list)
+            for fold, value in observations:
+                values_by_fold[fold].append(value)
+            values = [
+                " / ".join(f"{value:.3f}" for value in values_by_fold[fold]) or "—"
+                for fold in range(1, 6)
+            ]
+            average = f"{mean(value for _, value in observations):.3f}"
+            completed = sum(value != "—" for value in values)
+            if completed < len(values):
+                average += f" ({completed}/5)"
+            rows.append([label, STYLES[method][0], *values, average])
+
+    ax.set_axis_off()
+    if not rows:
+        ax.text(0.5, 0.5, "No completed folds", ha="center", va="center", color=MUTED)
+        return
+    table = ax.table(
+        cellText=rows,
+        colLabels=[
+            "Model / input",
+            "Method",
+            "Fold 1",
+            "Fold 2",
+            "Fold 3",
+            "Fold 4",
+            "Fold 5",
+            "Mean",
+        ],
+        colWidths=[0.315, 0.15, 0.082, 0.082, 0.082, 0.082, 0.082, 0.125],
+        cellLoc="center",
+        bbox=[0, 0, 1, 1],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10.5)
+    for (row, column), cell in table.get_celld().items():
+        cell.set_edgecolor("white")
+        cell.set_linewidth(0.7)
+        if column < 2:
+            cell.PAD = 0.04
+            cell.set_text_props(ha="left")
+        if row == 0:
+            cell.set_facecolor(INK)
+            cell.set_text_props(color="white", weight="bold")
+        elif column == 7:
+            cell.set_facecolor(PALE)
+            cell.set_text_props(weight="bold")
+        elif row % 2 == 0:
+            cell.set_facecolor("#F4F7FA")
+
+
+def fold_table_figure(folds, transcript):
+    groups, labels, methods = fold_settings(folds, transcript)
+    fig = Figure(figsize=(17.2, 4.7 + 0.36 * len(groups) * len(methods)))
+    axes = fig.subplots(2, 2)
+    title(fig, "Transcript CV scores by fold" if transcript else "Tabular CV scores by fold")
+    fig.subplots_adjust(left=0.035, right=0.965, top=0.80, bottom=0.06, wspace=0.10, hspace=0.24)
+    legend(
+        fig,
+        [
+            Patch(facecolor=PALE, edgecolor=GRID, label="Mean of available folds"),
+            marker_handle("Unavailable fold score", marker="_"),
+        ],
+    )
+    for dataset, panels in zip(DATASETS, axes):
+        for task, ax in zip(TASKS, panels):
+            ax.set_title(f"{DATASETS[dataset]} · {AXIS_LABELS[METRICS[task]]}", loc="left", pad=8)
+            fold_table_panel(ax, fold_scores(folds, dataset, task), groups, labels, methods)
     return fig
 
 
@@ -589,6 +676,8 @@ def render_results(data_path: Path, output: Path) -> None:
         ("05_transcript_paired", paired_figure, (transcript, True)),
         ("06_transcript_runtime", compute_figure, (folds,)),
         ("07_pilot_and_standalone", history_figure, (runs, data["pilot"]["runs"])),
+        ("08_tabular_cv_table", fold_table_figure, (folds, False)),
+        ("09_transcript_cv_table", fold_table_figure, (folds, True)),
     ]
     output.mkdir(parents=True, exist_ok=True)
     total = len(tasks)

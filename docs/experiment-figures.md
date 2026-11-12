@@ -1,6 +1,6 @@
 # Experiment figures
 
-The plot command reads an aggregate results snapshot and exports seven figures as 300 DPI PNGs.
+The plot command reads an aggregate results snapshot and exports nine figures as 300 DPI PNGs.
 Run it from the project root.
 
 ```bash
@@ -22,7 +22,10 @@ It keeps aggregate scores and source identifiers. The plotting command reads onl
 | `05_transcript_paired` | Pooled Qwen scores and paired intervals from collected reports |
 | `06_transcript_runtime` | Median W&B elapsed time per fold by method and GPU |
 | `07_pilot_and_standalone` | Earlier development and test scores from pilot and standalone runs |
+| `08_tabular_cv_table` | All tabular fold scores and their means, shown to three decimal places |
+| `09_transcript_cv_table` | All transcript fold scores and their means, with partial counts |
 
 ROC-AUC measures class ranking. Mean absolute error (MAE) measures score error in PHQ-8 points.
 A fold mean averages the individual fold scores. A pooled score uses the combined held-out
-predictions. Paired intervals describe the saved predictions at seed 42.
+predictions. Dashes in the tables mark unavailable fold scores. Paired intervals describe the saved
+predictions at seed 42.
