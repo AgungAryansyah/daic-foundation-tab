@@ -1,8 +1,7 @@
-"""Render the saved DAIC aggregate results as PNG and PDF figures."""
+"""Render the saved DAIC aggregate results as PNG figures."""
 
 import json
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 from statistics import mean, median
 from time import monotonic
@@ -58,25 +57,19 @@ FIGURE_STYLE = {
     "ytick.major.size": 0,
     "axes.axisbelow": True,
     "legend.frameon": False,
-    "pdf.fonttype": 42,
     "savefig.facecolor": "white",
 }
 
 
-def title(fig, heading, subtitle):
-    fig.text(0.035, 0.958, heading, fontsize=25, weight="bold", va="top")
-    fig.text(0.036, 0.897, subtitle, fontsize=11.5, color=MUTED, va="top")
+def title(fig, heading):
+    fig.text(0.035, 0.97, heading, fontsize=25, weight="bold", va="top")
 
 
-def footer(fig, text):
-    fig.text(0.036, 0.025, text, fontsize=9.5, color=MUTED, va="bottom")
-
-
-def legend(fig, handles, y=0.838):
+def legend(fig, handles):
     fig.legend(
         handles=handles,
         loc="center left",
-        bbox_to_anchor=(0.032, y),
+        bbox_to_anchor=(0.032, 0.87),
         ncol=len(handles),
         borderaxespad=0,
         handletextpad=0.45,
@@ -125,7 +118,7 @@ def finished_folds(runs):
     return list(unique.values())
 
 
-def coverage_figure(folds, date_label):
+def coverage_figure(folds):
     groups = [
         ("Tabular · DAIC-WOZ", 120, "daic_woz", TABULAR_MODELS, ("frozen_icl", "fine_tuning")),
         ("Tabular · E-DAIC", 120, "edaic", TABULAR_MODELS, ("frozen_icl", "fine_tuning")),
@@ -148,11 +141,7 @@ def coverage_figure(folds, date_label):
     total = sum(group[1] for group in groups)
     fig = Figure(figsize=(11.6, 5.5))
     ax = fig.subplots()
-    title(
-        fig,
-        f"{sum(counts)} of {total} cross-validation conditions complete",
-        f"DAIC research progress · {date_label}",
-    )
+    title(fig, f"{sum(counts)} of {total} cross-validation conditions complete")
     legend(
         fig,
         [
@@ -161,7 +150,7 @@ def coverage_figure(folds, date_label):
             Patch(facecolor=PALE, edgecolor=GRID, label="Planned conditions remaining"),
         ],
     )
-    fig.subplots_adjust(left=0.32, right=0.93, top=0.78, bottom=0.17)
+    fig.subplots_adjust(left=0.32, right=0.93, top=0.82, bottom=0.12)
     yrows(ax, [group[0] for group in groups])
     ax.set_xlim(0, 1.17)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1], ["0%", "25%", "50%", "75%", "100%"])
@@ -174,10 +163,6 @@ def coverage_figure(folds, date_label):
     )
     for i, (done, group) in enumerate(zip(counts, groups)):
         ax.text(1.02, i, f"{done}/{group[1]}", va="center", fontsize=10, weight="bold")
-    footer(
-        fig,
-        "Source · W&B run summaries. Counts show completed / planned conditions. Each condition is one held-out fold.",
-    )
     return fig
 
 
@@ -246,28 +231,22 @@ def fold_figure(folds, transcript):
         groups = [(model, "transcript") for model in models]
         labels = [MODELS[model] for model in models]
         heading = "Transcript cross-validation"
-        source = (
-            "Source · W&B run summaries. Partial means show how many of five folds have scores."
-        )
     else:
         methods = ("frozen_icl", "fine_tuning")
         groups = [(model, input_) for model in TABULAR_MODELS for input_ in INPUTS]
         labels = [f"{MODELS[model]} · {INPUTS[input_]}" for model, input_ in groups]
         heading = "Tabular cross-validation"
-        source = (
-            "Source · W&B run summaries. Input features represent audio, facial behavior, or both."
-        )
     selected = [r for r in folds if r["model"] in (QWEN_MODELS if transcript else TABULAR_MODELS)]
     errors = [r["metrics"]["cv/mae"] for r in selected if "cv/mae" in r["metrics"]]
     upper_mae = max(1, max(errors, default=1) * 1.12)
     fig = Figure(figsize=(13.2, 7.6 if transcript else 9.2))
     axes = fig.subplots(2, 2)
-    title(fig, heading, "Classification and PHQ-8 score prediction on shared participant folds.")
+    title(fig, heading)
     fig.subplots_adjust(
         left=0.225 if not transcript else 0.165,
         right=0.968,
-        top=0.76,
-        bottom=0.13,
+        top=0.80,
+        bottom=0.10,
         hspace=0.61,
         wspace=0.77 if not transcript else 0.51,
     )
@@ -279,7 +258,7 @@ def fold_figure(folds, transcript):
         marker_handle("5-fold mean"),
     ]
     if transcript:
-        handles.append(marker_handle("Partial fold mean", filled=False))
+        handles.append(marker_handle("Partial fold mean (n/5)", filled=False))
     handles.append(Line2D([], [], label="ROC-AUC 0.50", color=REFERENCE, linestyle="--"))
     legend(fig, handles)
     for dataset, row in zip(DATASETS, axes):
@@ -294,7 +273,6 @@ def fold_figure(folds, transcript):
                 methods,
                 (0, 1) if task == "classification" else (0, upper_mae),
             )
-    footer(fig, source)
     return fig
 
 
@@ -351,15 +329,11 @@ def paired_figure(entries, transcript):
         width_ratios=(1.1, 1.48, 1.48, 1.0),
         left=0.28 if transcript else 0.34,
         right=0.97,
-        bottom=0.16,
-        top=0.75,
+        bottom=0.11,
+        top=0.80,
         wspace=0.17,
     )
-    title(
-        fig,
-        f"{title_prefix} · paired changes on held-out participants",
-        "Scores pool the held-out predictions. Values beneath each point show reference → candidate.",
-    )
+    title(fig, f"{title_prefix} · paired changes on held-out participants")
     comparisons = (
         [method_handle("lora", "LoRA candidate"), method_handle("dora", "DoRA candidate")]
         if transcript
@@ -420,19 +394,13 @@ def paired_figure(entries, transcript):
             ax.text(
                 0.97,
                 i + 0.33,
-                f"{float(row[before]):.{digits}f} → {float(row[after]):.{digits}f}",
+                f"Ref. {float(row[before]):.{digits}f} → {float(row[after]):.{digits}f}",
                 transform=ax.get_yaxis_transform(),
                 ha="right",
                 va="center",
                 color=MUTED,
                 fontsize=8,
             )
-    source = (
-        "Source · Collected transcript reports and matched DoRA comparisons. Intervals describe saved seed-42 predictions."
-        if transcript
-        else "Source · Collected tabular reports. Fine-tuning is the candidate in every row."
-    )
-    footer(fig, source)
     return fig
 
 
@@ -445,12 +413,8 @@ def compute_figure(folds):
             groups[r["dataset"], r["model"], r["task"], gpu, r["method"]].append(runtime / 60)
     fig = Figure(figsize=(13.1, 6.15))
     axes = fig.subplots(1, 2)
-    title(
-        fig,
-        "Transcript runtime by method",
-        "The line extends from zero to the median elapsed time recorded by W&B.",
-    )
-    fig.subplots_adjust(left=0.22, right=0.96, top=0.74, bottom=0.18, wspace=0.71)
+    title(fig, "Transcript runtime by method")
+    fig.subplots_adjust(left=0.22, right=0.96, top=0.79, bottom=0.12, wspace=0.71)
     methods = ("frozen_icl", "lora", "dora")
     legend(
         fig,
@@ -500,7 +464,6 @@ def compute_figure(folds):
                 )
         ax.set_title(TASKS[task], loc="left", fontsize=12, pad=11)
         ax.set_xlabel("Minutes per fold", labelpad=8)
-    footer(fig, "Source · W&B runtime and GPU metadata.")
     return fig
 
 
@@ -543,12 +506,8 @@ def history_figure(runs, pilots):
     total_rows = sum(map(len, groups.values()))
     fig = Figure(figsize=(13.3, max(9.8, total_rows * 0.37 + 4)))
     axes = fig.subplots(2, 2, height_ratios=[len(groups[t]) for t in TASKS])
-    title(
-        fig,
-        "Pilot and standalone experiments",
-        "Individual run scores from the earlier development and test protocols.",
-    )
-    fig.subplots_adjust(left=0.33, right=0.96, top=0.78, bottom=0.10, wspace=0.33, hspace=0.34)
+    title(fig, "Pilot and standalone experiments")
+    fig.subplots_adjust(left=0.33, right=0.96, top=0.81, bottom=0.08, wspace=0.33, hspace=0.34)
     legend(
         fig,
         [
@@ -610,10 +569,6 @@ def history_figure(runs, pilots):
             ax.set_xlim(0, 1 if metric == "roc_auc" else max(values, default=1) * 1.10)
             ax.set_xlabel(AXIS_LABELS[metric])
             ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
-    footer(
-        fig,
-        "Sources · Local September pilot outputs and W&B. Each marker represents a run under its original protocol.",
-    )
     return fig
 
 
@@ -626,10 +581,8 @@ def render_results(data_path: Path, output: Path) -> None:
     reports = data["collected"]["reports"]
     comparisons = data["collected"]["comparisons"]
     tabular, transcript = paired_entries(reports, comparisons)
-    stamp = datetime.fromisoformat(data["wandb"]["captured_at"])
-    date_label = stamp.strftime("%d %B %Y")
     tasks = [
-        ("01_coverage", coverage_figure, (folds, date_label)),
+        ("01_coverage", coverage_figure, (folds,)),
         ("02_tabular_cv", fold_figure, (folds, False)),
         ("03_transcript_cv", fold_figure, (folds, True)),
         ("04_tabular_paired", paired_figure, (tabular, False)),
@@ -645,7 +598,6 @@ def render_results(data_path: Path, output: Path) -> None:
         with rc_context(FIGURE_STYLE):
             fig = render(*inputs)
             fig.savefig(output / f"{name}.png", dpi=300)
-            fig.savefig(output / f"{name}.pdf")
         elapsed = monotonic() - started
         eta = f"{elapsed / count * (total - count):.1f}s estimated" if count > 1 else "unavailable"
         print(

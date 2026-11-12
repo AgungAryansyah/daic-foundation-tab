@@ -412,7 +412,7 @@ W&B charts each model's real per-epoch mean training loss and validation metrics
 
 ## Experiment figures
 
-Use `plot-results` to render the aggregate results snapshot as PNG and PDF figures. See the
+Use `plot-results` to render the aggregate results snapshot as PNG figures. See the
 [figure guide](docs/experiment-figures.md) for the command, input, and figure definitions.
 
 ## Research use

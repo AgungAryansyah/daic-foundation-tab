@@ -1,7 +1,7 @@
 # Experiment figures
 
-The plot command reads an aggregate results snapshot and exports seven figures as 300 DPI PNGs
-and vector PDFs. Run it from the project root.
+The plot command reads an aggregate results snapshot and exports seven figures as 300 DPI PNGs.
+Run it from the project root.
 
 ```bash
 uv run --locked daic-foundation-tab plot-results
