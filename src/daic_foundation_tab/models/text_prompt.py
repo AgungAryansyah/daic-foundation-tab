@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import defaultdict
 from collections.abc import Sequence
+from functools import cached_property
 from pathlib import Path
 
 import numpy as np
@@ -113,6 +115,17 @@ class PromptEncoder:
         return list(self.tokenizer.encode(answer, add_special_tokens=False)) + [
             self.tokenizer.eos_token_id
         ]
+
+    @cached_property
+    def score_token_choices(self) -> dict[tuple[int, ...], list[int]]:
+        choices = defaultdict(set)
+        for score in range(25):
+            tokens = self.completion(str(score))
+            if len(tokens) - 1 > self.max_new_tokens:
+                continue
+            for index, token in enumerate(tokens[: self.max_new_tokens]):
+                choices[tuple(tokens[:index])].add(token)
+        return {prefix: sorted(tokens) for prefix, tokens in choices.items()}
 
     def check_length(self, prompt_tokens: int, answer_tokens: int) -> None:
         if prompt_tokens + answer_tokens > self.max_length:

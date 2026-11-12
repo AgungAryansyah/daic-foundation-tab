@@ -17,6 +17,9 @@ class TinyTokenizer:
     def encode(self, text, **kwargs):
         return [3 + ord(character) % 100 for character in text]
 
+    def decode(self, tokens, *, skip_special_tokens=False):
+        return "".join(chr(int(token) - 3) for token in tokens if int(token) != self.eos_token_id)
+
 
 def test_answer_only_loss_and_no_query_label_or_identifier_in_prompt(tmp_path):
     example = TextExample("secret_id", "I feel tired", 12)
@@ -59,6 +62,12 @@ def test_invalid_scores_are_rejected(text):
 
 def test_decimal_scores_are_preserved():
     assert parse_score(" 12.5\n") == 12.5
+
+
+def test_score_token_choices_respect_the_generation_budget():
+    tokenizer = TinyTokenizer()
+    encoder = PromptEncoder(tokenizer, "regression", {"max_length": 4096, "max_new_tokens": 1}, {})
+    assert encoder.score_token_choices == {(): tokenizer.encode("0123456789")}
 
 
 def test_native_transformers_template_returns_flat_integer_ids():

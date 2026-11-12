@@ -43,16 +43,6 @@ def test_native_hybrid_qwen_fold(tmp_path, monkeypatch, task, mode, adapter_meth
         with torch.no_grad():
             model.model.layers[0].linear_attn.in_proj_qkv.weight[0].zero_()
         tokenizer = TinyTokenizer()
-        if task == "regression":
-            generate = model.generate
-
-            def numeric_generate(input_ids, **kwargs):
-                start = input_ids.shape[1]
-                return generate(input_ids=input_ids, **kwargs, prefix_allowed_tokens_fn=lambda batch, tokens:
-                                list(range(51, 61)) if len(tokens) == start else [2])
-
-            model.generate = numeric_generate
-            tokenizer.decode = lambda tokens, **kwargs: "".join(chr(int(token) - 3) for token in tokens if int(token) != 2)
         originals.extend((parameter, parameter.detach().clone()) for parameter in model.parameters())
         return QwenTextModel(config, model=model, tokenizer=tokenizer, revision=config["model"]["revision"])
 

@@ -195,23 +195,33 @@ def test_dora_resume_updates_magnitude_and_rejects_mismatched_adapter(tmp_path, 
     assert restored.predict(validation) == resumed.predict(validation)
 
 
-def test_regression_uses_numeric_generation_and_rejects_invalid_output(tmp_path, monkeypatch):
+@pytest.mark.parametrize("raw,expected", [("12.5", "12.5"), ("30", "24"), ("1.  **Physical Health", "24")])
+def test_regression_retries_invalid_scores_with_token_constraints(tmp_path, monkeypatch, raw, expected):
     import torch
 
     adapter = tiny_adapter(tmp_path, task="regression")
-    adapter.tokenizer.decode = lambda *args, **kwargs: "12.5"
-    monkeypatch.setattr(
-        adapter.model,
-        "generate",
-        lambda input_ids, **kwargs: torch.cat(
-            [input_ids, torch.tensor([[3]], device=input_ids.device)], dim=1
-        ),
-    )
+    calls = []
+
+    def generate(input_ids, prefix_allowed_tokens_fn=None, **kwargs):
+        calls.append(prefix_allowed_tokens_fn is not None)
+        if prefix_allowed_tokens_fn is None:
+            answer = adapter.tokenizer.encode(raw)
+            return torch.cat((input_ids, input_ids.new_tensor([answer])), dim=1)
+        output = input_ids
+        candidates = [tuple(adapter.encoder.completion(str(score))) for score in range(25)]
+        for index, token in enumerate(adapter.encoder.completion("24")):
+            prefix = tuple(output[0, input_ids.shape[1] :].tolist())
+            allowed = prefix_allowed_tokens_fn(0, output[0])
+            assert set(allowed) == {c[index] for c in candidates if c[:index] == prefix}
+            assert token in allowed
+            output = torch.cat((output, output.new_tensor([[token]])), dim=1)
+        return output
+
+    monkeypatch.setattr(adapter.model, "generate", generate)
     adapter.prepare([])
-    assert adapter.predict([TextExample("dev", "Tired")])[0].value == 12.5
-    adapter.tokenizer.decode = lambda *args, **kwargs: "PHQ score: 12"
-    with pytest.raises(ValueError, match="numeric answer"):
-        adapter.predict([TextExample("dev", "Tired")])
+    prediction = adapter.predict([TextExample("dev", "Tired")])[0]
+    assert (prediction.value, prediction.raw_answer) == (float(expected), expected)
+    assert calls == ([False] if raw == expected else [False, True])
 
 
 def test_classification_scores_the_whole_answer_including_eos(tmp_path):

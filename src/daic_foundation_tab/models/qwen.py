@@ -127,6 +127,35 @@ class QwenTextModel:
         probabilities = logits[0, -(len(suffix) + 1) : -1].float().log_softmax(-1)
         return probabilities.gather(1, self._tensor(suffix).T).sum()
 
+    def _predict_score(self, prompt: list[int]) -> TextPrediction:
+        import torch
+
+        tokens = self._tensor(prompt)
+        options = {
+            "input_ids": tokens,
+            "attention_mask": torch.ones_like(tokens),
+            "do_sample": False,
+            "max_new_tokens": self.encoder.max_new_tokens,
+            "eos_token_id": self.tokenizer.eos_token_id,
+            "pad_token_id": self.tokenizer.eos_token_id,
+            "use_cache": True,
+        }
+
+        def decode(output):
+            return self.tokenizer.decode(output[0, len(prompt) :], skip_special_tokens=True)
+
+        answer = decode(self.model.generate(**options))
+        try:
+            value = parse_score(answer)
+        except ValueError:
+            choices = self.encoder.score_token_choices
+            answer = decode(self.model.generate(
+                **options,
+                prefix_allowed_tokens_fn=lambda _, ids: choices[tuple(ids[len(prompt) :].tolist())],
+            ))
+            value = parse_score(answer)
+        return TextPrediction(value, None, answer, len(prompt))
+
     def predict(self, examples: Sequence[TextExample]) -> list[TextPrediction]:
         import torch
 
@@ -150,20 +179,7 @@ class QwenTextModel:
                     value = int(probability > self.config["evaluation"]["threshold"])
                     results.append(TextPrediction(value, probability, str(value), len(prompt)))
                 else:
-                    tokens = self._tensor(prompt)
-                    output = self.model.generate(
-                        input_ids=tokens,
-                        attention_mask=torch.ones_like(tokens),
-                        do_sample=False,
-                        max_new_tokens=self.encoder.max_new_tokens,
-                        eos_token_id=self.tokenizer.eos_token_id,
-                        pad_token_id=self.tokenizer.eos_token_id,
-                        use_cache=True,
-                    )
-                    answer = self.tokenizer.decode(
-                        output[0, len(prompt) :], skip_special_tokens=True
-                    )
-                    results.append(TextPrediction(parse_score(answer), None, answer, len(prompt)))
+                    results.append(self._predict_score(prompt))
         return results
 
     def _training_loss(self, record):
