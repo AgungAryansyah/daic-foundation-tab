@@ -10,6 +10,7 @@ from time import monotonic
 from matplotlib import rc_context
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 
 DATASETS = {"daic_woz": "DAIC-WOZ", "edaic": "E-DAIC"}
@@ -38,6 +39,8 @@ MUTED = "#465B72"
 GRID = "#DDE5EF"
 PALE = "#E9EEF5"
 TEAL = "#008269"
+BLUE = STYLES["frozen_icl"][1]
+REFERENCE = "#6F8094"
 
 FIGURE_STYLE = {
     "font.family": "DejaVu Sans",
@@ -81,9 +84,24 @@ def legend(fig, handles, y=0.838):
     )
 
 
-def method_handle(method):
-    label, color, marker = STYLES[method]
-    return Line2D([], [], label=label, color=color, marker=marker, linestyle="none", markersize=8)
+def method_handle(method, label=None):
+    name, color, marker = STYLES[method]
+    return Line2D(
+        [], [], label=label or name, color=color, marker=marker, linestyle="none", markersize=8
+    )
+
+
+def marker_handle(label, *, size=7, filled=True, marker="o"):
+    return Line2D(
+        [],
+        [],
+        label=label,
+        marker=marker,
+        color=MUTED,
+        linestyle="none",
+        markersize=size,
+        markerfacecolor=MUTED if filled else "white",
+    )
 
 
 def yrows(ax, labels):
@@ -135,7 +153,15 @@ def coverage_figure(folds, date_label):
         f"{sum(counts)} of {total} cross-validation conditions complete",
         f"DAIC research progress · {date_label}",
     )
-    fig.subplots_adjust(left=0.32, right=0.93, top=0.80, bottom=0.17)
+    legend(
+        fig,
+        [
+            Patch(facecolor=TEAL, label="Campaign complete"),
+            Patch(facecolor=BLUE, label="Completed in a partial campaign"),
+            Patch(facecolor=PALE, edgecolor=GRID, label="Planned conditions remaining"),
+        ],
+    )
+    fig.subplots_adjust(left=0.32, right=0.93, top=0.78, bottom=0.17)
     yrows(ax, [group[0] for group in groups])
     ax.set_xlim(0, 1.17)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1], ["0%", "25%", "50%", "75%", "100%"])
@@ -143,13 +169,14 @@ def coverage_figure(folds, date_label):
     ax.barh(
         range(len(groups)),
         [done / group[1] for done, group in zip(counts, groups)],
-        color=[TEAL if done == group[1] else "#0072B2" for done, group in zip(counts, groups)],
+        color=[TEAL if done == group[1] else BLUE for done, group in zip(counts, groups)],
         height=0.48,
     )
     for i, (done, group) in enumerate(zip(counts, groups)):
         ax.text(1.02, i, f"{done}/{group[1]}", va="center", fontsize=10, weight="bold")
     footer(
-        fig, "Source · W&B run summaries. Each completed condition represents one held-out fold."
+        fig,
+        "Source · W&B run summaries. Counts show completed / planned conditions. Each condition is one held-out fold.",
     )
     return fig
 
@@ -209,7 +236,7 @@ def fold_panel(ax, folds, labels, groups, dataset, task, methods, limits):
     ax.set_title(f"{DATASETS[dataset]} · {TASKS[task]}", loc="left", fontsize=12, pad=11)
     ax.set_xlabel(AXIS_LABELS[metric], labelpad=8)
     if task == "classification":
-        ax.axvline(0.5, color="#8393A6", linewidth=1, linestyle="--", zorder=1)
+        ax.axvline(0.5, color=REFERENCE, linewidth=1, linestyle="--", zorder=1)
 
 
 def fold_figure(folds, transcript):
@@ -219,16 +246,14 @@ def fold_figure(folds, transcript):
         groups = [(model, "transcript") for model in models]
         labels = [MODELS[model] for model in models]
         heading = "Transcript cross-validation"
-        note = (
-            "Open markers show partial groups. The label gives the number of folds with a metric."
+        source = (
+            "Source · W&B run summaries. Partial means show how many of five folds have scores."
         )
-        source = "Source · W&B run summaries. The dashed line marks ROC-AUC = 0.50."
     else:
         methods = ("frozen_icl", "fine_tuning")
         groups = [(model, input_) for model in TABULAR_MODELS for input_ in INPUTS]
         labels = [f"{MODELS[model]} · {INPUTS[input_]}" for model, input_ in groups]
         heading = "Tabular cross-validation"
-        note = "The dashed line marks ROC-AUC = 0.50."
         source = (
             "Source · W&B run summaries. Input features represent audio, facial behavior, or both."
         )
@@ -237,18 +262,26 @@ def fold_figure(folds, transcript):
     upper_mae = max(1, max(errors, default=1) * 1.12)
     fig = Figure(figsize=(13.2, 7.6 if transcript else 9.2))
     axes = fig.subplots(2, 2)
-    title(
-        fig, heading, "Small dots show individual folds. Large markers show their arithmetic mean."
-    )
+    title(fig, heading, "Classification and PHQ-8 score prediction on shared participant folds.")
     fig.subplots_adjust(
         left=0.225 if not transcript else 0.165,
         right=0.968,
-        top=0.773,
+        top=0.76,
         bottom=0.13,
         hspace=0.61,
         wspace=0.77 if not transcript else 0.51,
     )
-    legend(fig, [method_handle(method) for method in methods])
+    fold_handle = marker_handle("Fold score", size=4)
+    fold_handle.set_alpha(0.45)
+    handles = [
+        *[method_handle(method) for method in methods],
+        fold_handle,
+        marker_handle("5-fold mean"),
+    ]
+    if transcript:
+        handles.append(marker_handle("Partial fold mean", filled=False))
+    handles.append(Line2D([], [], label="ROC-AUC 0.50", color=REFERENCE, linestyle="--"))
+    legend(fig, handles)
     for dataset, row in zip(DATASETS, axes):
         for task, ax in zip(TASKS, row):
             fold_panel(
@@ -261,7 +294,7 @@ def fold_figure(folds, transcript):
                 methods,
                 (0, 1) if task == "classification" else (0, upper_mae),
             )
-    footer(fig, f"{note}\n{source}")
+    footer(fig, source)
     return fig
 
 
@@ -319,13 +352,27 @@ def paired_figure(entries, transcript):
         left=0.28 if transcript else 0.34,
         right=0.97,
         bottom=0.16,
-        top=0.77,
+        top=0.75,
         wspace=0.17,
     )
     title(
         fig,
         f"{title_prefix} · paired changes on held-out participants",
-        "Each point is a pooled score difference. The line shows its 95% paired bootstrap interval.",
+        "Scores pool the held-out predictions. Values beneath each point show reference → candidate.",
+    )
+    comparisons = (
+        [method_handle("lora", "LoRA candidate"), method_handle("dora", "DoRA candidate")]
+        if transcript
+        else [method_handle("fine_tuning", "Fine-tuning − frozen ICL")]
+    )
+    legend(
+        fig,
+        [
+            *comparisons,
+            marker_handle("Pooled difference"),
+            Line2D([], [], label="95% paired bootstrap interval", color=MUTED, linewidth=2.2),
+            Line2D([], [], label="No change (0)", color=REFERENCE, linestyle="--"),
+        ],
     )
     for start, task in zip((0, 2), TASKS):
         ax = fig.add_subplot(grid[0, start : start + 2])
@@ -336,7 +383,7 @@ def paired_figure(entries, transcript):
             yrows(ax, [""] * len(rows))
         if [row[0] for row in rows] != sorted(row[0] for row in entries["classification"]):
             raise ValueError("Paired comparisons must cover the same groups for both tasks")
-        ax.axvline(0, color="#6F8094", linewidth=1.2, linestyle="--")
+        ax.axvline(0, color=REFERENCE, linewidth=1.2, linestyle="--")
         span = max(abs(float(r[key])) for _, _, r, *_ in rows for key in ("ci_lower", "ci_upper"))
         ax.set_xlim(-span * 1.10, span * 1.10)
         ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
@@ -401,11 +448,18 @@ def compute_figure(folds):
     title(
         fig,
         "Transcript runtime by method",
-        "Median elapsed minutes recorded by W&B. The hardware label identifies the GPU.",
+        "The line extends from zero to the median elapsed time recorded by W&B.",
     )
     fig.subplots_adjust(left=0.22, right=0.96, top=0.74, bottom=0.18, wspace=0.71)
     methods = ("frozen_icl", "lora", "dora")
-    legend(fig, [method_handle(method) for method in methods])
+    legend(
+        fig,
+        [
+            *[method_handle(method) for method in methods],
+            marker_handle("Median across 5 folds"),
+            marker_handle("Median across available folds (n/5)", filled=False),
+        ],
+    )
     for ax, task in zip(axes, TASKS):
         keys = sorted({(dataset, model, gpu) for dataset, model, t, gpu, _ in groups if t == task})
         labels = [
@@ -446,10 +500,7 @@ def compute_figure(folds):
                 )
         ax.set_title(TASKS[task], loc="left", fontsize=12, pad=11)
         ax.set_xlabel("Minutes per fold", labelpad=8)
-    footer(
-        fig,
-        "Source · W&B runtime and GPU metadata. Labels on open markers give coverage for partial groups.",
-    )
+    footer(fig, "Source · W&B runtime and GPU metadata.")
     return fig
 
 
@@ -498,19 +549,15 @@ def history_figure(runs, pilots):
         "Individual run scores from the earlier development and test protocols.",
     )
     fig.subplots_adjust(left=0.33, right=0.96, top=0.78, bottom=0.10, wspace=0.33, hspace=0.34)
-    filled = Line2D([], [], marker="o", color=MUTED, linestyle="none", label="Full run")
-    opened = Line2D(
-        [],
-        [],
-        marker="o",
-        color=MUTED,
-        markerfacecolor="white",
-        linestyle="none",
-        label="Smoke test",
-    )
-    partial = Line2D([], [], marker="x", color=MUTED, linestyle="none", label="Partial output")
     legend(
-        fig, [method_handle("frozen_icl"), method_handle("fine_tuning"), filled, opened, partial]
+        fig,
+        [
+            method_handle("frozen_icl"),
+            method_handle("fine_tuning"),
+            marker_handle("Complete run"),
+            marker_handle("Smoke test", filled=False),
+            marker_handle("Partial output", marker="x"),
+        ],
     )
     for task, panels in zip(TASKS, axes):
         metric = METRICS[task]
