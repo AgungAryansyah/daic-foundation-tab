@@ -59,7 +59,7 @@ def test_plot_results_uses_project_output_paths(monkeypatch) -> None:
     assert rendered == [(Path("outputs/results_snapshot.json"), Path("outputs"))]
 
 
-def test_run_tabular_study_accepts_kumo_large():
+def test_run_tabular_study_accepts_kumo_large_with_mode():
     args = _parser().parse_args(
         [
             "run-tabular-study",
@@ -69,9 +69,12 @@ def test_run_tabular_study_accepts_kumo_large():
             "kumo_large",
             "--modality",
             "audio",
+            "--mode",
+            "fine_tuning",
             "--host-config",
             "host.yaml",
         ]
     )
 
     assert args.model == "kumo_large"
+    assert args.mode == "fine_tuning"

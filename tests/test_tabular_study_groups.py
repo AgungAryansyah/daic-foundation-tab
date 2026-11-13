@@ -8,6 +8,7 @@ import yaml
 
 from daic_foundation_tab.tabular_study import groups
 from daic_foundation_tab.tabular_study.bundle import read_bundle
+from daic_foundation_tab.tabular_study.collection import collect_study
 from daic_foundation_tab.tabular_study.condition import run_condition
 from daic_foundation_tab.tabular_study.results import write_result
 
@@ -69,6 +70,35 @@ def test_groups_run_independently_and_resume_completed_conditions(prepared, tmp_
         json.loads(next((tmp_path / "host-two").rglob("status.json")).read_text())["status"]
         == "completed"
     )
+
+
+def test_methods_run_separately_and_collect_together(prepared, tmp_path, monkeypatch):
+    bundle, _ = prepared
+    study = read_bundle(bundle)[0]
+    launches = []
+    monkeypatch.setattr(groups, "_run_subprocess", fake_launcher(launches))
+    roots = []
+    for mode in ("frozen_icl", "fine_tuning"):
+        host = host_file(tmp_path, mode)
+        start = len(launches)
+        root = groups.run_group(bundle, "tabpfn35", "audio", host, mode=mode)
+        roots.append(root)
+        expected = [
+            condition["condition_id"]
+            for condition in study["conditions"]["cv"]
+            if (condition["family"], condition["modality"], condition["mode"])
+            == ("tabpfn35", "audio", mode)
+        ]
+        assert launches[start:] == expected
+        status = json.loads((root / "status.json").read_text())
+        assert status["completed_conditions"] == status["total_conditions"] == 10
+        groups.run_group(bundle, "tabpfn35", "audio", host, mode=mode)
+        assert launches[start:] == expected
+
+    report = collect_study(bundle, roots, tmp_path / "report", allow_partial=True)
+    coverage = json.loads((report / "coverage.json").read_text())
+    assert coverage["completed"] == 20
+    assert (report / "cv_paired_oof.csv").stat().st_size > 1
 
 
 def test_group_rejects_concurrent_execution(prepared, tmp_path):

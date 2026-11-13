@@ -74,7 +74,16 @@ uv run --no-sync daic-foundation-tab run-tabular-study \
   --host-config /private/host.yaml
 ```
 
-Choose `tabpfn35` or `kumo_medium`, and `audio`, `visual`, or `audio_visual`. Repeat for the other groups, on this system or other systems. A group runs all its tasks, methods, folds, and configured seeds. Assign each group to only one system: its lock is local to that system. The runner keeps a status file and logs, stops a group on failure, and skips verified completed conditions when restarted with the same paths. Each successful fine-tuning condition retains its selected checkpoint on the execution host.
+Choose a model and feature set from the prepared study. By default, the group runs all its tasks, methods, folds, and seeds. The runner records status and logs, stops on failure, and skips verified results on restart. Each successful fine-tuning condition retains its selected checkpoint on the execution host.
+
+### Run methods in parallel
+
+1. Prepare one bundle per dataset with the source revision that adds `--mode`. Give both sessions the same bundle. Use the same source revision and locked dependencies in both sessions.
+2. Set a distinct persistent `output_root` in each host configuration. Keep one session responsible for each assigned condition. The runner lock is local to each system.
+3. Add `--mode frozen_icl` to the command in one session. Add `--mode fine_tuning` in the other session. Repeat for each feature set.
+4. Use the same mode and output root when restarting a session. Pass both output roots to the collector for that dataset.
+
+If a bundle already has results from an earlier source revision, register this revision before using `--mode`. See [Repair and resume](#repair-and-resume).
 
 W&B records condition identifiers, settings, aggregate predictive and runtime metrics, training history, and hardware and provenance metadata. The new study disables console capture and does not explicitly upload participant-level predictions. Local bundles, logs, predictions, and checkpoints remain sensitive. Runtime comparisons should be interpreted by GPU type and memory capacity.
 

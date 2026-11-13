@@ -80,6 +80,9 @@ def _parser() -> argparse.ArgumentParser:
         "--model", required=True, choices=["tabpfn35", "kumo_medium", "kumo_large"]
     )
     run_tabular.add_argument("--modality", required=True, choices=["audio", "visual", "audio_visual"])
+    run_tabular.add_argument(
+        "--mode", choices=["frozen_icl", "fine_tuning"], help="Run one method (default: all)"
+    )
     run_tabular.add_argument("--host-config", required=True, type=Path)
     run_tabular.add_argument("--stage", default="cv", choices=["cv", "final"])
     collect_tabular = subparsers.add_parser("collect-tabular-study")
@@ -266,7 +269,16 @@ def main() -> None:
     if args.command == "run-tabular-study":
         from daic_foundation_tab.tabular_study.groups import run_group
 
-        print(run_group(args.study, args.model, args.modality, args.host_config, stage=args.stage))
+        print(
+            run_group(
+                args.study,
+                args.model,
+                args.modality,
+                args.host_config,
+                stage=args.stage,
+                mode=args.mode,
+            )
+        )
         return
     if args.command == "run-matched-study":
         from daic_foundation_tab.study_runner import run_study

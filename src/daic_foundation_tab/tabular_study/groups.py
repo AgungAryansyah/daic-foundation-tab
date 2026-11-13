@@ -69,7 +69,13 @@ def _existing(context: tuple, group_root: Path, condition: dict) -> Path | None:
 
 
 def run_group(
-    bundle: str | Path, model: str, modality: str, host_path: str | Path, *, stage: str = "cv"
+    bundle: str | Path,
+    model: str,
+    modality: str,
+    host_path: str | Path,
+    *,
+    stage: str = "cv",
+    mode: str | None = None,
 ) -> Path:
     bundle, host_path = Path(bundle).resolve(), Path(host_path).resolve()
     host = load_host(host_path)
@@ -82,6 +88,10 @@ def run_group(
     ]
     if not conditions:
         raise ValueError("The requested model and modality are not in the study")
+    if mode is not None:
+        conditions = [condition for condition in conditions if condition["mode"] == mode]
+        if not conditions:
+            raise ValueError(f"The requested mode {mode!r} is not scheduled for this group")
     group_root = Path(host["output_root"]) / study["study_id"] / stage / f"{model}-{modality}"
     group_root.mkdir(parents=True, exist_ok=True)
     with (group_root / ".run.lock").open("a") as lock:
