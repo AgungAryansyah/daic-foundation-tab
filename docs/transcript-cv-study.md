@@ -116,7 +116,7 @@ Preflight loads the full pinned checkpoint. It exercises the longest applicable 
 
 The profile identifies the study, audit, source, task, stage, host, GPU, CPU thread setting, and container limit. A changed identity requires another preflight. A failed probe leaves a status record without a runnable profile. Capacity failures stop immediately without queuing or changing model settings.
 
-Each dataset has two independent groups: `classification` and `regression`. Each group has ten CV conditions. Run groups on separate systems or sequentially on one system. Assign each group to one system only, because its lock is local.
+The runner groups conditions by task. By default, it runs all methods scheduled for that task. Assign each set of conditions to one session because locks are local to each system.
 
 ```bash
 uv run --no-sync daic-foundation-tab run-transcript-study \
@@ -136,6 +136,37 @@ nohup uv run --no-sync daic-foundation-tab run-transcript-study \
 Outputs reside under `<output_root>/<study_id>/cv/<model-family>-<task>/`. `status.json` records the active condition, counts, outputs, and failures. Logs report phases, work units, elapsed time, throughput, and available ETA estimates. Silent phases emit activity every 30 seconds. RAM monitoring continues during model operations.
 
 The group stops on failure. Repeat its command to skip verified completed conditions. Interrupted LoRA training resumes from its latest complete checkpoint when input and configuration identities match. Without a complete checkpoint, training restarts explicitly. Incomplete prediction work restarts. A completed run that lacks only its result marker is verified and sealed without repeating inference. The selected adapter remains separate from recovery checkpoints.
+
+### Run 9B methods on separate GPUs
+
+Use the same audited 9B bundle and software revision in both sessions. Use a separate host YAML and persistent `output_root` for each session. For Colab, set the output roots to distinct folders in your mounted Drive. Keep each cache on its runtime disk.
+
+| Session | `--mode` | Example host configuration |
+| --- | --- | --- |
+| A100 40 GB, subject to preflight | `fine_tuning` (DoRA for the 9B presets) | `/private/host-dora.yaml` |
+| L4 24 GB, subject to preflight | `frozen_icl` | `/private/host-icl.yaml` |
+
+Run this in each session. Set `HOST_CONFIG` and `MODE` to the values in its row. Set `STUDY` to the path of the same prepared bundle in that session.
+
+```bash
+STUDY=/private/edaic-9b-study
+HOST_CONFIG=/private/host-icl.yaml
+MODE=frozen_icl
+
+for task in classification regression; do
+  uv run --no-sync daic-foundation-tab preflight-transcript-study \
+    --study "$STUDY" --host-config "$HOST_CONFIG" --task "$task" --mode "$MODE" || exit 1
+done
+
+for task in classification regression; do
+  uv run --no-sync daic-foundation-tab run-transcript-study \
+    --study "$STUDY" --host-config "$HOST_CONFIG" --task "$task" --mode "$MODE" || exit 1
+done
+```
+
+Each 9B session runs five CV conditions per task. Each method has a separate preflight profile. Find its `status.json` in the method subdirectory of the task output directory. Frozen ICL preflight runs prediction with demonstrations. Fine-tuning preflight checks adapter updates and evaluation. Each task requires a passed profile for the same method and host.
+
+Pass both sessions' `output_root` paths to `collect-transcript-study --runs` with the shared bundle. The collector checks all 20 CV conditions for that dataset. Repeat with the other dataset's bundle.
 
 ## Tracking and collection
 
