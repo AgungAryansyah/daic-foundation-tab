@@ -63,8 +63,7 @@ def _parser() -> argparse.ArgumentParser:
         transcript_run.add_argument("--host-config", required=True, type=Path)
         transcript_run.add_argument("--task", required=True, choices=["classification", "regression"])
         transcript_run.add_argument("--stage", choices=["cv", "final"], default="cv")
-        if command == "preflight-transcript-study":
-            transcript_run.add_argument("--mode", choices=["frozen_icl", "fine_tuning"], help="Probe one method (default: all)")
+        transcript_run.add_argument("--mode", choices=["frozen_icl", "fine_tuning"], help="Select one method (default: all)")
     transcript_collect = subparsers.add_parser("collect-transcript-study")
     transcript_collect.add_argument("--study", required=True, type=Path)
     transcript_collect.add_argument("--runs", required=True, nargs="+", type=Path)
@@ -238,7 +237,7 @@ def main() -> None:
     if args.command == "run-transcript-study":
         from daic_foundation_tab.transcript_study.groups import run_group
 
-        print(run_group(args.study, args.host_config, args.task, stage=args.stage))
+        print(run_group(args.study, args.host_config, args.task, stage=args.stage, mode=args.mode))
         return
     if args.command == "collect-transcript-study":
         from daic_foundation_tab.transcript_study.collection import collect_study

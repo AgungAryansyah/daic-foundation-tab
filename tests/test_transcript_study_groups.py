@@ -50,11 +50,11 @@ def test_group_verifies_results_skips_completed_and_recovers_failure(tmp_path, m
     install_model(monkeypatch)
     calls = []
 
-    def execute(bundle, host_path, condition, host):
+    def execute(bundle, host_path, condition, host, mode):
         calls.append(condition["condition_id"])
         if len(calls) == 2:
             raise RuntimeError("interrupted worker")
-        groups.condition_worker(bundle, host_path, condition["condition_id"], condition["stage"])
+        groups.condition_worker(bundle, host_path, condition["condition_id"], condition["stage"], mode)
 
     monkeypatch.setattr(groups, "_run_subprocess", execute)
     with pytest.raises(RuntimeError, match="interrupted"):
@@ -86,6 +86,51 @@ def test_group_lock_prevents_concurrent_execution(tmp_path, monkeypatch):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(ValueError, match="already running"):
             groups.run_group(bundle, host, "regression")
+        with pytest.raises(ValueError, match="already running"):
+            groups.run_group(bundle, host, "regression", mode="frozen_icl")
+
+
+def test_mode_groups_have_separate_locks_and_reuse_completed_conditions(tmp_path, monkeypatch):
+    bundle, host = prepared_input(tmp_path), host_input(tmp_path)
+    install_model(monkeypatch)
+    checked, executed = [], []
+    monkeypatch.setattr(groups, "require_preflight", lambda *args: checked.append(args[-1]))
+
+    def execute(bundle, host_path, condition, host, mode):
+        executed.append(mode)
+        assert mode is None or condition["mode"] == mode
+        groups.condition_worker(bundle, host_path, condition["condition_id"], condition["stage"], mode)
+
+    monkeypatch.setattr(groups, "_run_subprocess", execute)
+    root = tmp_path / "runs" / read_bundle(bundle)[0]["study_id"] / "cv/qwen35_2b-classification"
+    frozen = root / "frozen_icl"
+    frozen.mkdir(parents=True)
+    with groups._run_lock(root / ".run.lock", fcntl.LOCK_SH), groups._run_lock(frozen / ".run.lock", fcntl.LOCK_EX):
+        for mode in (None, "frozen_icl"):
+            with pytest.raises(ValueError, match="already running"):
+                groups.run_group(bundle, host, "classification", mode=mode)
+        assert groups.run_group(bundle, host, "classification", mode="fine_tuning") == root
+
+    assert executed == ["fine_tuning"] * 5 and checked == ["fine_tuning"] * 10
+    groups.run_group(bundle, host, "classification", mode="frozen_icl")
+    assert executed[5:] == ["frozen_icl"] * 5 and checked[10:] == ["frozen_icl"] * 10
+    for mode in ("frozen_icl", "fine_tuning"):
+        state = json.loads((root / mode / "status.json").read_text())
+        assert state["mode"] == mode and state["completed_conditions"] == state["total_conditions"] == 5
+        for condition_id in state["conditions"]:
+            result = next((root / condition_id).glob("*/result.json"))
+            assert json.loads(result.read_text())["condition"]["mode"] == mode
+
+    groups.run_group(bundle, host, "classification")
+    assert len(executed) == 10 and len(checked) == 20
+    assert json.loads((root / "status.json").read_text())["completed_conditions"] == 10
+
+
+def test_worker_rejects_condition_outside_its_mode(tmp_path):
+    bundle, host = prepared_input(tmp_path), host_input(tmp_path)
+    frozen = next(c for c in read_bundle(bundle)[0]["conditions"]["cv"] if c["mode"] == "frozen_icl")
+    with pytest.raises(ValueError, match="mode differs"):
+        groups.condition_worker(bundle, host, frozen["condition_id"], "cv", "fine_tuning")
 
 
 def test_group_requires_preflight_and_worker_must_write_a_result(tmp_path, monkeypatch):

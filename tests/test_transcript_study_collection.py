@@ -3,6 +3,7 @@ import shutil
 
 import pandas as pd
 import pytest
+import yaml
 
 from daic_foundation_tab.transcript_study import groups
 from daic_foundation_tab.transcript_study.bundle import read_bundle
@@ -15,8 +16,8 @@ from tests.test_transcript_study_groups import host_input, install_model
 def completed_campaign(tmp_path, monkeypatch, *, stage="cv", family="qwen35_2b"):
     bundle, host = prepared_input(tmp_path, family), host_input(tmp_path)
     install_model(monkeypatch)
-    monkeypatch.setattr(groups, "_run_subprocess", lambda bundle, path, condition, host:
-                        groups.condition_worker(bundle, path, condition["condition_id"], condition["stage"]))
+    monkeypatch.setattr(groups, "_run_subprocess", lambda bundle, path, condition, host, mode:
+                        groups.condition_worker(bundle, path, condition["condition_id"], condition["stage"], mode))
     for task in ("classification", "regression"):
         groups.run_group(bundle, host, task, stage=stage)
     return bundle, tmp_path / "runs"
@@ -55,6 +56,26 @@ def test_collector_rejects_missing_conditions_and_changed_results(tmp_path, monk
         collect_study(bundle, [runs], tmp_path / "report")
     report = collect_study(bundle, [runs], tmp_path / "partial", allow_partial=True)
     assert json.loads((report / "coverage.json").read_text())["status"] == "incomplete"
+
+
+def test_collector_combines_results_from_separate_method_hosts(tmp_path, monkeypatch):
+    bundle = prepared_input(tmp_path)
+    install_model(monkeypatch)
+    monkeypatch.setattr(groups, "_run_subprocess", lambda bundle, path, condition, host, mode:
+                        groups.condition_worker(bundle, path, condition["condition_id"], condition["stage"], mode))
+    roots = []
+    for mode in ("frozen_icl", "fine_tuning"):
+        root = tmp_path / mode
+        host = tmp_path / f"{mode}.yaml"
+        host.write_text(yaml.safe_dump({"output_root": str(root), "host_label": mode, "wandb": {"mode": "disabled"}}))
+        for task in ("classification", "regression"):
+            groups.run_group(bundle, host, task, mode=mode)
+        roots.append(root)
+    report = collect_study(bundle, roots, tmp_path / "report")
+    coverage = json.loads((report / "coverage.json").read_text())
+    assert coverage["status"] == "completed" and coverage["completed"] == 20
+    pairs = pd.read_csv(report / "cv_paired_oof.csv")
+    assert set(zip(pairs["task"], pairs["metric"])) >= {("classification", "roc_auc"), ("regression", "mae")}
 
 
 def test_transcript_comparison_validates_report_and_imported_folds(tmp_path, monkeypatch):

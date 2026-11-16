@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from daic_foundation_tab.cli import _compare, _parser, _validate, main
 
 from .helpers import write_synthetic_dataset
@@ -78,3 +80,19 @@ def test_run_tabular_study_accepts_kumo_large_with_mode():
 
     assert args.model == "kumo_large"
     assert args.mode == "fine_tuning"
+
+
+@pytest.mark.parametrize(("command", "handler"), [
+    ("preflight-transcript-study", "preflight.preflight_study"),
+    ("run-transcript-study", "groups.run_group"),
+])
+@pytest.mark.parametrize("mode", [None, "frozen_icl", "fine_tuning"])
+def test_transcript_cli_passes_the_selected_mode(monkeypatch, command, handler, mode):
+    calls = []
+    monkeypatch.setattr(f"daic_foundation_tab.transcript_study.{handler}", lambda *args, **options: calls.append(options))
+    argv = ["daic-foundation-tab", command, "--study", "bundle", "--host-config", "host.yaml", "--task", "classification"]
+    if mode is not None:
+        argv.extend(["--mode", mode])
+    monkeypatch.setattr(sys, "argv", argv)
+    main()
+    assert calls == [{"stage": "cv", "mode": mode}]
