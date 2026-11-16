@@ -95,10 +95,13 @@ def hardware_identity(host: dict) -> dict:
             "container_ram_limit_mb": memory_snapshot()["container_ram_limit_mb"]}
 
 
-def profile_identity(study: dict, audit: dict, host: dict, task: str, stage: str) -> dict:
-    return {"study_id": study["study_id"], "software_identity": study["software_identity"],
-            "audit_id": audit["audit_id"], "task": task, "stage": stage, "hardware": hardware_identity(host),
-            "dependency_versions": dependency_versions()}
+def profile_identity(study: dict, audit: dict, host: dict, task: str, stage: str, mode: str | None = None) -> dict:
+    identity = {"study_id": study["study_id"], "software_identity": study["software_identity"],
+                "audit_id": audit["audit_id"], "task": task, "stage": stage, "hardware": hardware_identity(host),
+                "dependency_versions": dependency_versions()}
+    if mode is not None:
+        identity["mode"] = mode
+    return identity
 
 
 def profile_path(host: dict, identity: dict) -> Path:

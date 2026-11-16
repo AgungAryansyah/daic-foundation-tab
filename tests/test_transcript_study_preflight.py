@@ -76,7 +76,12 @@ def test_nested_cgroups_use_the_most_restrictive_available_capacity(tmp_path):
     assert resources._cgroup_capacity(mount, membership) == (8000, 1500)
 
 
-def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode,expected", [
+    (None, [("frozen_icl", 2), ("fine_tuning", 0)]),
+    ("frozen_icl", [("frozen_icl", 2)]),
+    ("fine_tuning", [("fine_tuning", 0)]),
+])
+def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_path, monkeypatch, mode, expected):
     import torch
 
     from daic_foundation_tab.models.text_base import TextPrediction
@@ -109,6 +114,7 @@ def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_
             assert examples
 
         def fit(self, training, validation, directory, progress):
+            assert self.config["experiment"]["mode"] == "fine_tuning"
             assert self.config["model"]["parameters"]["epochs"] == 2
             assert len(training) == 1 and len(validation) == 2
             assert all(x.target is not None for x in [*training, *validation])
@@ -131,9 +137,36 @@ def test_probe_exercises_optimizer_state_residency_and_unlabeled_prediction(tmp_
     monkeypatch.setattr(torch.cuda, "synchronize", lambda: None)
     monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
     logger = SimpleNamespace(info=lambda *args: None, exception=lambda *args: None)
-    peaks = preflight._probe(context, audit, host, "classification", "cv", logger)
+    peaks = preflight._probe(context, audit, host, "classification", "cv", logger, mode)
     assert peaks["peak_process_ram_mb"] == 500 and peaks["peak_cuda_reserved_mb"] == 1000
-    assert calls == [("frozen_icl", 2), ("fine_tuning", 0)]
+    assert calls == expected
+
+
+def test_preflight_profiles_and_status_are_specific_to_the_selected_mode(tmp_path, monkeypatch):
+    from tests.test_transcript_study_groups import host_input
+
+    mock_hardware(monkeypatch)
+    bundle, host_path = prepared_input(tmp_path), host_input(tmp_path)
+    monkeypatch.setattr(preflight, "require_cuda_device", lambda device: device)
+    probed_modes = []
+
+    def probe(context, audit, host, task, stage, logger, mode):
+        probed_modes.append(mode)
+        return {"peak_process_ram_mb": 512, "peak_cuda_reserved_mb": 1024}
+
+    monkeypatch.setattr(preflight, "_probe", probe)
+    context, host = read_bundle(bundle), resources.load_host(host_path)
+    frozen = preflight.preflight_worker(bundle, host_path, "classification", "cv", "frozen_icl")
+    for other in (None, "fine_tuning"):
+        with pytest.raises(ValueError, match="successful preflight"):
+            preflight.require_preflight(bundle, context, host, "classification", "cv", other)
+    tuned = preflight.preflight_worker(bundle, host_path, "classification", "cv", "fine_tuning")
+    assert probed_modes == ["frozen_icl", "fine_tuning"] and frozen != tuned
+    for mode, path in zip(probed_modes, (frozen, tuned), strict=True):
+        profile = preflight.require_preflight(bundle, context, host, "classification", "cv", mode)
+        assert profile["identity"]["mode"] == mode
+        status = json.loads((path.parent / f"classification-cv-{mode}.status.json").read_text())
+        assert status["status"] == "passed" and status["profile"] == str(path)
 
 
 def test_failed_repeat_probe_invalidates_a_previous_success(tmp_path, monkeypatch):

@@ -23,7 +23,7 @@ from daic_foundation_tab.tracking.runtime import (
 from daic_foundation_tab.tracking.seeds import set_global_seed
 
 from .audit import require_audit
-from .bundle import TASKS, dataset_for, read_bundle
+from .bundle import MODES, TASKS, dataset_for, read_bundle, scheduled_conditions
 from .condition import execution_config
 from .resources import (
     configure_threads,
@@ -37,13 +37,13 @@ from .resources import (
 )
 
 
-def require_preflight(bundle: Path, context: tuple, host: dict, task: str, stage: str) -> dict:
+def require_preflight(bundle: Path, context: tuple, host: dict, task: str, stage: str, mode: str | None = None) -> dict:
     study = context[0]
     audit = require_audit(bundle, study)
-    identity = profile_identity(study, audit, host, task, stage)
+    identity = profile_identity(study, audit, host, task, stage, mode)
     path = profile_path(host, identity)
     if not path.is_file():
-        raise ValueError("Run a successful preflight for this study, task, stage, and host first")
+        raise ValueError("Run a successful preflight with the same study, task, stage, mode, and host first")
     profile = json.loads(path.read_text())
     payload = {key: value for key, value in profile.items() if key != "profile_id"}
     if (profile.get("identity") != identity or profile.get("status") != "passed"
@@ -67,7 +67,7 @@ def _longest_condition(candidates, details, role):
     ))
 
 
-def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logger) -> dict:
+def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logger, mode: str | None = None) -> dict:
     import torch
 
     study = context[0]
@@ -75,11 +75,10 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
     evaluation_roles = ("evaluation",) if stage == "cv" else ("dev", "test")
     peaks = {"peak_process_ram_mb": 0.0, "peak_cuda_reserved_mb": 0.0, "peak_cuda_allocated_mb": 0.0}
     by_mode = {}
-    for condition in study["conditions"][stage]:
-        if condition["task"] == task:
-            by_mode.setdefault(condition["mode"], []).append(condition)
-    for completed, (mode, candidates) in enumerate(by_mode.items(), 1):
-        relevant_role = "fit" if mode == "fine_tuning" else evaluation_roles[0]
+    for condition in scheduled_conditions(study, task, stage, mode):
+        by_mode.setdefault(condition["mode"], []).append(condition)
+    for completed, (probe_mode, candidates) in enumerate(by_mode.items(), 1):
+        relevant_role = "fit" if probe_mode == "fine_tuning" else evaluation_roles[0]
         condition = _longest_condition(candidates, details, relevant_role)
         detail = details[condition["condition_id"]]
         dataset = dataset_for(context, condition)
@@ -88,14 +87,14 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
         config["model"]["parameters"].update(epochs=2, gradient_accumulation_steps=1, checkpoint_steps=1)
         set_global_seed(condition["model_seed"])
         reset_cuda_peak_memory("cuda:0")
-        with phase(logger, f"preflighting {mode}"), observe_resources(logger) as resources:
+        with phase(logger, f"preflighting {probe_mode}"), observe_resources(logger) as resources:
             model = create_text_model(config)
             demonstrations = select_demonstrations(dataset.examples("fit", labeled=True),
                                                    config["model"]["parameters"]["demonstrations"], condition["model_seed"])
             model.prepare(demonstrations)
             if model.run_metadata()["checkpoint_revision"] != config["model"]["revision"]:
                 raise ValueError("Preflight loaded a different model checkpoint")
-            if mode == "fine_tuning":
+            if probe_mode == "fine_tuning":
                 training = [_longest(dataset, detail, "fit", labeled=True)]
                 selection = dataset.examples("selection", labeled=True)
                 lengths = {r["participant_id"]: r["total_tokens"] for r in detail["records"]}
@@ -111,7 +110,7 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
             for role in evaluation_roles:
                 evaluation = _longest_condition(candidates, details, role)
                 evaluation_data = dataset_for(context, evaluation)
-                if evaluation != condition and mode == "frozen_icl":
+                if evaluation != condition and probe_mode == "frozen_icl":
                     model.prepare(select_demonstrations(
                         evaluation_data.examples("fit", labeled=True),
                         config["model"]["parameters"]["demonstrations"],
@@ -134,29 +133,30 @@ def _probe(context: tuple, audit: dict, host: dict, task: str, stage: str, logge
     return peaks
 
 
-def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str) -> Path:
+def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str, mode: str | None = None) -> Path:
     host = load_host(host_path)
     configure_threads(host)
     context = read_bundle(bundle)
     study = context[0]
-    if task not in TASKS or stage not in study["conditions"]:
-        raise ValueError("Unsupported transcript preflight task or stage")
+    scheduled_conditions(study, task, stage, mode)
     audit = require_audit(bundle, study)
     directory = Path(host["output_root"]) / study["study_id"] / "preflight"
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    logger = configure_run_logger(directory / f"{task}-{stage}.log", "INFO")
-    status_path = directory / f"{task}-{stage}.status.json"
-    _json(status_path, {"status": "running", "task": task, "stage": stage})
+    scope = f"{task}-{stage}" if mode is None else f"{task}-{stage}-{mode}"
+    logger = configure_run_logger(directory / f"{scope}.log", "INFO")
+    status_path = directory / f"{scope}.status.json"
+    status = {"task": task, "stage": stage, "mode": mode}
+    _json(status_path, {**status, "status": "running"})
     destination = None
     measured = {}
     try:
         require_cuda_device("cuda:0")
-        identity = profile_identity(study, audit, host, task, stage)
+        identity = profile_identity(study, audit, host, task, stage, mode)
         destination = profile_path(host, identity)
         _json(destination, {"version": 1, "status": "running", "identity": identity})
         require_capacity({"peak_process_ram_mb": 2048 / 1.2, "peak_cuda_reserved_mb": 8192 / 1.2})
         with phase(logger, "full-checkpoint transcript preflight"):
-            measured = _probe(context, audit, host, task, stage, logger)
+            measured = _probe(context, audit, host, task, stage, logger, mode)
         logger.info("phase=preflight peak_ram=%.1fMiB peak_gpu_reserved=%.1fMiB",
                     measured["peak_process_ram_mb"], measured["peak_cuda_reserved_mb"])
         require_capacity(measured)
@@ -164,21 +164,23 @@ def preflight_worker(bundle: Path, host_path: Path, task: str, stage: str) -> Pa
                    "memory": memory_snapshot()}
         profile["profile_id"] = fingerprint(profile)
         _json(destination, profile)
-        _json(status_path, {"status": "passed", "profile": str(destination)})
+        _json(status_path, {**status, "status": "passed", "profile": str(destination)})
         return destination
     except BaseException as error:
         if destination is not None:
             _json(destination, {"version": 1, "status": "failed", "identity": identity,
                                 "error_type": type(error).__name__, **measured})
-        _json(status_path, {"status": "failed", "error_type": type(error).__name__, "error": str(error)})
+        _json(status_path, {**status, "status": "failed", "error_type": type(error).__name__, "error": str(error)})
         raise
 
 
-def preflight_study(bundle: Path, host_path: Path, task: str, *, stage: str = "cv") -> None:
+def preflight_study(bundle: Path, host_path: Path, task: str, *, stage: str = "cv", mode: str | None = None) -> None:
     host = load_host(host_path)
-    subprocess.run([sys.executable, "-u", "-m", __name__, "--study", str(Path(bundle).resolve()),
-                    "--host-config", str(Path(host_path).resolve()), "--task", task, "--stage", stage],
-                   env=worker_environment(host), check=True)
+    command = [sys.executable, "-u", "-m", __name__, "--study", str(Path(bundle).resolve()),
+               "--host-config", str(Path(host_path).resolve()), "--task", task, "--stage", stage]
+    if mode is not None:
+        command.extend(["--mode", mode])
+    subprocess.run(command, env=worker_environment(host), check=True)
 
 
 if __name__ == "__main__":
@@ -187,5 +189,6 @@ if __name__ == "__main__":
     parser.add_argument("--host-config", type=Path, required=True)
     parser.add_argument("--task", choices=TASKS, required=True)
     parser.add_argument("--stage", choices=("cv", "final"), default="cv")
+    parser.add_argument("--mode", choices=MODES)
     args = parser.parse_args()
-    print(preflight_worker(args.study, args.host_config, args.task, args.stage))
+    print(preflight_worker(args.study, args.host_config, args.task, args.stage, args.mode))

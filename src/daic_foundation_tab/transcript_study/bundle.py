@@ -27,6 +27,16 @@ TASKS = ("classification", "regression")
 MODES = ("frozen_icl", "fine_tuning")
 
 
+def scheduled_conditions(study: dict, task: str, stage: str, mode: str | None) -> list[dict]:
+    if task not in TASKS or stage not in study["conditions"]:
+        raise ValueError("Unsupported transcript task or stage")
+    conditions = [condition for condition in study["conditions"][stage]
+                  if condition["task"] == task and (mode is None or condition["mode"] == mode)]
+    if not conditions:
+        raise ValueError(f"Transcript mode {mode!r} is not scheduled for {task} in {stage}")
+    return conditions
+
+
 def condition_config(config: dict, task: str, mode: str, seed: int) -> dict:
     config = deepcopy(config)
     config["project"]["seed"] = seed
